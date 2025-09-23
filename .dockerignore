@@ -1,0 +1,44 @@
+# Exclude VCS and metadata
+.git
+.gitignore
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv
+
+# Tests & dev artifacts
+tests
+htmlcov
+.coverage
+coverage.xml
+
+# Logs & temp
+*.log
+*.tmp
+*.swp
+*.DS_Store
+
+# Env files
+.env*
+
+# Docs / markdown (keep README if needed)
+ARCHITECTURE.md
+CONFIG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+LICENSE
+*.md
+!README.md
+
+# Compose & build files (not needed in runtime image)
+docker-compose.yml
+Dockerfile
+
+# Examples
+examples

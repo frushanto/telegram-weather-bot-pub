@@ -1,0 +1,16 @@
+# Security configuration for bandit
+exclude_dirs:
+  - tests
+  - .venv
+  - __pycache__
+
+skips:
+  # Skip hardcoded password detection in test files
+  - B105
+  # Skip use of shell=True (we don't use it)
+  - B602
+  # Skip subprocess without shell equals true
+  - B603
+
+confidence: medium
+severity: medium

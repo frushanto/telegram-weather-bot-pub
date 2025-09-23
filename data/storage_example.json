@@ -1,0 +1,35 @@
+{
+  "123456789": {
+    "lat": 55.7558,
+    "lon": 37.6176,
+    "label": "Moscow, Russia",
+    "language": "ru",
+    "sub_hour": 8,
+    "sub_min": 0
+  },
+  "987654321": {
+    "lat": 40.7128,
+    "lon": -74.0060,
+    "label": "New York, NY, USA",
+    "language": "en",
+    "sub_hour": 9,
+    "sub_min": 30
+  },
+  "555666777": {
+    "lat": 51.5074,
+    "lon": -0.1278,
+    "label": "London, England, UK",
+    "language": "en"
+  },
+  "444555666": {
+    "lat": 52.5200,
+    "lon": 13.4050,
+    "label": "Berlin, Deutschland",
+    "language": "de",
+    "sub_hour": 7,
+    "sub_min": 0
+  },
+  "777888999": {
+    "language": "ru"
+  }
+}

@@ -1,0 +1,10 @@
+services:
+  bot:
+    build: .
+    container_name: weather-bot
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - ADMIN_IDS=${ADMIN_IDS}
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
