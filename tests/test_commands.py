@@ -201,7 +201,7 @@ async def test_subscribe_cmd():
             "weatherbot.handlers.commands.get_subscription_service",
             return_value=mock_subscription_service,
         ):
-            with patch("weatherbot.handlers.commands.schedule_daily"):
+            with patch("weatherbot.handlers.commands.schedule_daily_timezone_aware"):
                 with patch(
                     "weatherbot.handlers.commands.i18n.get",
                     return_value="Подписка установлена",

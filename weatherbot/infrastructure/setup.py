@@ -8,6 +8,7 @@ from ..domain.services import GeocodeService, SpamProtectionService, WeatherServ
 from .external_services import NominatimGeocodeService, OpenMeteoWeatherService
 from .json_repository import JsonUserRepository
 from .spam_service import LegacySpamProtectionService
+from .timezone_service import TimezoneService
 
 
 def setup_container() -> None:
@@ -20,9 +21,13 @@ def setup_container() -> None:
     container.register_singleton(WeatherService, OpenMeteoWeatherService())
     container.register_singleton(GeocodeService, NominatimGeocodeService())
     container.register_singleton(SpamProtectionService, LegacySpamProtectionService())
+    container.register_singleton(TimezoneService, TimezoneService())
 
     container.register_factory(
-        UserService, lambda: UserService(container.get(UserRepository))
+        UserService,
+        lambda: UserService(
+            container.get(UserRepository), container.get(TimezoneService)
+        ),
     )
     container.register_factory(
         WeatherApplicationService,
@@ -68,3 +73,8 @@ def get_weather_application_service() -> WeatherApplicationService:
 def get_subscription_service() -> SubscriptionService:
 
     return container.get(SubscriptionService)
+
+
+def get_timezone_service() -> TimezoneService:
+
+    return container.get(TimezoneService)

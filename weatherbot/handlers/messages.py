@@ -28,7 +28,7 @@ from weatherbot.infrastructure.state import (
     awaiting_subscribe_time,
     last_location_by_chat,
 )
-from weatherbot.jobs.scheduler import schedule_daily
+from weatherbot.jobs.scheduler import schedule_daily_timezone_aware
 from weatherbot.presentation.formatter import format_weather
 from weatherbot.presentation.i18n import i18n
 from weatherbot.presentation.keyboards import (
@@ -127,14 +127,25 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 hour, minute = await subscription_service.parse_time_string(text)
                 await subscription_service.set_subscription(str(chat_id), hour, minute)
                 if context.application and context.application.job_queue:
-                    schedule_daily(context.application.job_queue, chat_id, hour, minute)
+                    import asyncio
+
+                    asyncio.create_task(
+                        schedule_daily_timezone_aware(
+                            context.application.job_queue, chat_id, hour, minute
+                        )
+                    )
                 await update.message.reply_text(
                     i18n.get("subscribe_success", user_lang, hour=hour, minute=minute),
                     reply_markup=main_keyboard(user_lang),
                 )
             except ValidationError as e:
+                # Check if it's home location error and use appropriate message
+                if "Home location must be set" in str(e):
+                    error_message = i18n.get("subscribe_home_required", user_lang)
+                else:
+                    error_message = str(e)
                 await update.message.reply_text(
-                    str(e), reply_markup=main_keyboard(user_lang)
+                    error_message, reply_markup=main_keyboard(user_lang)
                 )
             except Exception:
                 logger.exception(f"Error during subscription for {chat_id}")

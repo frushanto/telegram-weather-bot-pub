@@ -37,7 +37,7 @@ from weatherbot.infrastructure.setup import (
     setup_container,
 )
 from weatherbot.jobs.backup import schedule_daily_backup
-from weatherbot.jobs.scheduler import schedule_daily
+from weatherbot.jobs.scheduler import schedule_daily_timezone_aware
 
 project_root = Path(__file__).resolve().parent
 sys.path.insert(0, str(project_root))
@@ -127,7 +127,7 @@ def main() -> None:
                 subscription_service = get_subscription_service()
                 subscriptions = await subscription_service.get_all_subscriptions_dict()
                 for chat_id, sub_info in subscriptions.items():
-                    schedule_daily(
+                    await schedule_daily_timezone_aware(
                         app.job_queue,
                         int(chat_id),
                         sub_info["hour"],

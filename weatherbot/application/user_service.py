@@ -9,8 +9,9 @@ logger = logging.getLogger(__name__)
 
 class UserService:
 
-    def __init__(self, user_repository: UserRepository):
+    def __init__(self, user_repository: UserRepository, timezone_service=None):
         self._user_repo = user_repository
+        self._timezone_service = timezone_service
 
     async def get_user_home(self, chat_id: str) -> Optional[Dict]:
 
@@ -20,11 +21,15 @@ class UserService:
                 return None
 
             if all(key in user_data for key in ["lat", "lon", "label"]):
-                return {
+                home_data = {
                     "lat": user_data["lat"],
                     "lon": user_data["lon"],
                     "label": user_data["label"],
                 }
+                # Include timezone if available
+                if "timezone" in user_data:
+                    home_data["timezone"] = user_data["timezone"]
+                return home_data
             return None
         except Exception as e:
             logger.exception(f"Error getting home location for user {chat_id}")
@@ -41,13 +46,32 @@ class UserService:
                 raise ValidationError(f"Invalid longitude: {lon}")
             if not label or not label.strip():
                 raise ValidationError("Location label cannot be empty")
+
             user_data = await self._user_repo.get_user_data(str(chat_id)) or {}
             user_data.update({"lat": lat, "lon": lon, "label": label.strip()})
+
+            # Automatically determine timezone if timezone_service is available
+            if self._timezone_service:
+                timezone_name = self._timezone_service.get_timezone_by_coordinates(
+                    lat, lon
+                )
+                if timezone_name:
+                    user_data["timezone"] = timezone_name
+                    logger.info(
+                        f"Automatically set timezone '{timezone_name}' for user {chat_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"Could not determine timezone for coordinates {lat:.4f}, {lon:.4f} for user {chat_id}"
+                    )
+
             await self._user_repo.save_user_data(str(chat_id), user_data)
             logger.info(f"Home location set for user {chat_id}: {label}")
         except ValidationError:
             raise
         except Exception as e:
+            logger.exception(f"Error setting home location for user {chat_id}")
+            raise StorageError(f"Failed to set home location: {e}")
             logger.exception(f"Error setting home location for user {chat_id}")
             raise StorageError(f"Failed to set home location: {e}")
 
@@ -58,7 +82,7 @@ class UserService:
             if not user_data:
                 return False
 
-            home_keys = ["lat", "lon", "label"]
+            home_keys = ["lat", "lon", "label", "timezone"]  # Include timezone
             had_home = any(key in user_data for key in home_keys)
             for key in home_keys:
                 user_data.pop(key, None)

@@ -10,6 +10,7 @@
   "home_not_set": "❌ Home not set. Use /sethome <city>.",
   "home_removed": "✅ Home removed.",
   "subscribe_success": "✅ Subscription enabled for {hour}:{minute:02d}",
+  "subscribe_home_required": "❌ You must set a home location first before subscribing. Use /sethome <city>",
   "subscribe_invalid_time": "❌ Invalid time format. Use HH:MM or HH (e.g., 08:30 or 08)",
   "unsubscribe_success": "✅ Subscription disabled",
   "unsubscribe_not_found": "❌ No active subscription found",
@@ -131,7 +132,7 @@
   "admin_version_version": "Version",
   "admin_version_date": "Release date",
   "admin_version_languages": "Languages",
-  "admin_version_whats_new": "What's new in version 2.1.2",
+  "admin_version_whats_new": "What's new in version 2.2.0",
   "admin_version_tech_info": "Technical information",
   "admin_version_error": "Error retrieving version information."
 }

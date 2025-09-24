@@ -97,8 +97,22 @@ async def test_subscribe_interactive_flow(monkeypatch):
         "weatherbot.handlers.messages.get_subscription_service", lambda: sub_service
     )
 
+    # Mock user service to return home location
+    user_service = MagicMock()
+    user_service.get_user_home = AsyncMock(
+        return_value={"latitude": 55.7558, "longitude": 37.6173, "name": "Moscow"}
+    )
+    user_service.get_user_language = AsyncMock(return_value="en")
     monkeypatch.setattr(
-        "weatherbot.handlers.messages.schedule_daily", lambda jq, cid, h, m: None
+        "weatherbot.handlers.messages.get_user_service", lambda: user_service
+    )
+
+    async def mock_schedule_func(jq, cid, h, m):
+        return None
+
+    monkeypatch.setattr(
+        "weatherbot.handlers.messages.schedule_daily_timezone_aware",
+        mock_schedule_func,
     )
 
     update = MagicMock()

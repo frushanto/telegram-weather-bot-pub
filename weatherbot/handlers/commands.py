@@ -25,7 +25,7 @@ from weatherbot.infrastructure.state import (
     awaiting_sethome,
     awaiting_subscribe_time,
 )
-from weatherbot.jobs.scheduler import schedule_daily
+from weatherbot.jobs.scheduler import schedule_daily_timezone_aware
 from weatherbot.presentation.formatter import format_weather
 from weatherbot.presentation.i18n import i18n
 from weatherbot.presentation.keyboards import language_keyboard, main_keyboard
@@ -234,7 +234,13 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await subscription_service.set_subscription(str(chat_id), hour, minute)
 
         if context.application and context.application.job_queue:
-            schedule_daily(context.application.job_queue, chat_id, hour, minute)
+            import asyncio
+
+            asyncio.create_task(
+                schedule_daily_timezone_aware(
+                    context.application.job_queue, chat_id, hour, minute
+                )
+            )
         text = i18n.get("subscribe_success", user_lang, hour=hour, minute=minute)
         await update.message.reply_text(text, reply_markup=main_keyboard(user_lang))
     except ValidationError as e:
@@ -242,7 +248,14 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         user_lang = await get_user_service().get_user_language(
             str(update.effective_chat.id)
         )
-        await update.message.reply_text(str(e), reply_markup=main_keyboard(user_lang))
+        # Check if it's home location error and use appropriate message
+        if "Home location must be set" in str(e):
+            error_message = i18n.get("subscribe_home_required", user_lang)
+        else:
+            error_message = str(e)
+        await update.message.reply_text(
+            error_message, reply_markup=main_keyboard(user_lang)
+        )
     except Exception:
         logger.exception("Error in /subscribe command")
         user_lang = await get_user_service().get_user_language(
@@ -393,8 +406,11 @@ async def data_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if "sub_hour" in user_data:
             hour = user_data["sub_hour"]
             minute = user_data.get("sub_min", 0)
+            timezone_info = ""
+            if "timezone" in user_data:
+                timezone_info = f" ({user_data['timezone']})"
             data_parts.append(
-                f"🔔 {i18n.get('subscription', user_lang)}: {hour:02d}:{minute:02d}"
+                f"🔔 {i18n.get('subscription', user_lang)}: {hour:02d}:{minute:02d}{timezone_info}"
             )
         if "language" in user_data:
             data_parts.append(

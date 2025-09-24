@@ -10,6 +10,7 @@
   "home_not_set": "❌ Дом не установлен. Используйте /sethome <город>.",
   "home_removed": "✅ Дом удалён.",
   "subscribe_success": "✅ Подписка включена на {hour}:{minute:02d}",
+  "subscribe_home_required": "❌ Сначала установите дом командой /sethome <город>, а затем оформляйте подписку",
   "subscribe_invalid_time": "❌ Неправильный формат времени. Используйте HH:MM или HH (например: 08:30 или 08)",
   "unsubscribe_success": "✅ Подписка отключена",
   "unsubscribe_not_found": "❌ Подписка не была активна",
@@ -131,7 +132,7 @@
   "admin_version_version": "Версия",
   "admin_version_date": "Дата релиза",
   "admin_version_languages": "Языки",
-  "admin_version_whats_new": "Что нового в версии 2.1.2",
+  "admin_version_whats_new": "Что нового в версии 2.2.0",
   "admin_version_tech_info": "Техническая информация",
   "admin_version_error": "Ошибка при получении информации о версии."
 }

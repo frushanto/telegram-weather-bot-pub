@@ -1,7 +1,7 @@
 # Telegram Weather Bot
 
 [![CI/CD Pipeline](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml/badge.svg)](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-2.1.2-blue.svg)](weatherbot/__version__.py)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](weatherbot/__version__.py)
 [![Python](https://img.shields.io/badge/python-3.12-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
@@ -328,14 +328,14 @@ LOG_LEVEL=DEBUG python app.py
 
 See `weatherbot/__version__.RELEASE_NOTES` for detailed version history and updates.
 
-## 🆕 What's New — Version 2.1.2
+## 🆕 What's New — Version 2.2.0
 
-This release focuses on documentation alignment, minor fixes, and infrastructure cleanup.
+This release introduces timezone-aware scheduling and improves developer workflow:
 
-- Removed a non-functional coverage badge workflow that caused CI runs to fail.
-- Cleaned up GitHub Actions workflows and CI configuration.
-- Documentation updates: `ARCHITECTURE.md`, `CONFIG.md`, and `README.md` now reflect the actual providers (Open-Meteo + Nominatim), configuration keys, and DI setup.
-- Updated localization keys and admin-facing version messages.
+- **Timezone Support**: Daily weather subscriptions now support user-specific time zones for accurate delivery scheduling.
+- **Improved Makefile**: Fixed `.env` file loading on both POSIX and Windows systems for reliable development environment setup.
+- **Enhanced Testing**: Added comprehensive tests for DST edge cases and timezone transitions.
+- **Developer Experience**: Better cross-platform compatibility and improved CI reliability.
 
 For full release notes see `weatherbot.__version__.RELEASE_NOTES` or the project's changelog when available.
 

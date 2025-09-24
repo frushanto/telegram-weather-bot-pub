@@ -102,7 +102,9 @@ async def test_user_service():
         temp_path = f.name
     try:
         user_repo = JsonUserRepository(temp_path)
-        user_service = UserService(user_repo)
+        user_service = UserService(
+            user_repo, None
+        )  # No timezone service for basic tests
         test_chat_id = "test_user_service"
 
         await user_service.set_user_home(test_chat_id, 55.7558, 37.6176, "Москва")
@@ -138,6 +140,10 @@ async def test_subscription_service():
 
         subscription = await subscription_service.get_subscription(test_chat_id)
         assert subscription is None
+
+        # First set home location before creating subscription
+        user_data = {"lat": 55.7558, "lon": 37.6176, "label": "Moscow"}
+        await user_repo.save_user_data(test_chat_id, user_data)
 
         await subscription_service.set_subscription(test_chat_id, 8, 30)
 

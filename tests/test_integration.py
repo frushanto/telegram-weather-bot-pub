@@ -18,11 +18,14 @@ class TestSimpleIntegration:
         temp_file.close()
 
         repository = JsonUserRepository(temp_file.name)
-        user_service = UserService(repository)
+        user_service = UserService(
+            repository, None
+        )  # No timezone service for basic tests
         subscription_service = SubscriptionService(repository)
         return {
             "user_service": user_service,
             "subscription_service": subscription_service,
+            "user_repository": repository,
             "temp_file": temp_file.name,
         }
 
@@ -47,7 +50,12 @@ class TestSimpleIntegration:
 
         services = await self.setup_services()
         subscription_service = services["subscription_service"]
+        user_repo = services["user_repository"]
         user_id = "789012"
+
+        # First set home location before creating subscription
+        user_data = {"lat": 55.7558, "lon": 37.6176, "label": "Moscow"}
+        await user_repo.save_user_data(user_id, user_data)
 
         await subscription_service.set_subscription(user_id, 8, 30)
         sub = await subscription_service.get_subscription(user_id)

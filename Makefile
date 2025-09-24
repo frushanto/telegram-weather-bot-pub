@@ -56,20 +56,20 @@ endif
 run-dev: venv install
 ifeq ($(OS),Windows_NT)
 	@if not exist .env.dev (echo "File .env.dev not found. Create it with BOT_TOKEN=..." && exit 1)
-	$(PYBIN) -c "import os; [os.environ.setdefault(k,v) for k,v in [line.strip().split('=',1) for line in open('.env.dev') if '=' in line]]; import subprocess; subprocess.run(['$(PYBIN)', '$(APP)'])"
+	$(PYBIN) -c "from dotenv import load_dotenv, find_dotenv; import os; load_dotenv(find_dotenv('.env.dev')); os.execv('$(PYBIN)', ['$(PYBIN)', '$(APP)'])"
 else
 	@test -f .env.dev || (echo "File .env.dev not found. Create it with BOT_TOKEN=..." && exit 1)
-	bash -c "source $(VENV)/bin/activate && export $$(cat .env.dev | xargs) && python $(APP)"
+	bash -c "source $(VENV)/bin/activate && set -a && . .env.dev && set +a && python $(APP)"
 endif
 
 # 4) Run PROD locally (for testing)
 run-prod: venv install
 ifeq ($(OS),Windows_NT)
 	@if not exist .env.prod (echo "File .env.prod not found. Create it with BOT_TOKEN=..." && exit 1)
-	$(PYBIN) -c "import os; [os.environ.setdefault(k,v) for k,v in [line.strip().split('=',1) for line in open('.env.prod') if '=' in line]]; import subprocess; subprocess.run(['$(PYBIN)', '$(APP)'])"
+	$(PYBIN) -c "from dotenv import load_dotenv, find_dotenv; import os; load_dotenv(find_dotenv('.env.prod')); os.execv('$(PYBIN)', ['$(PYBIN)', '$(APP)'])"
 else
 	@test -f .env.prod || (echo "File .env.prod not found. Create it with BOT_TOKEN=..." && exit 1)
-	bash -c "source $(VENV)/bin/activate && export $$(cat .env.prod | xargs) && python $(APP)"
+	bash -c "source $(VENV)/bin/activate && set -a && . .env.prod && set +a && python $(APP)"
 endif
 
 # 5) Tests (without coverage). Added install dependency to ensure dev dependencies are installed

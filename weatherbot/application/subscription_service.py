@@ -20,11 +20,24 @@ class SubscriptionService:
                 raise ValidationError(f"Invalid hour: {hour}. Must be 0-23")
             if not (0 <= minute <= 59):
                 raise ValidationError(f"Invalid minute: {minute}. Must be 0-59")
+
             user_data = await self._user_repo.get_user_data(str(chat_id)) or {}
+
+            # Check if user has home location set
+            if not all(key in user_data for key in ["lat", "lon", "label"]):
+                raise ValidationError(
+                    "Home location must be set before subscribing to weather notifications"
+                )
+
             user_data.update({"sub_hour": hour, "sub_min": minute})
             await self._user_repo.save_user_data(str(chat_id), user_data)
+
+            timezone_info = ""
+            if "timezone" in user_data:
+                timezone_info = f" (timezone: {user_data['timezone']})"
+
             logger.info(
-                f"Subscription set for user {chat_id} at {hour:02d}:{minute:02d}"
+                f"Subscription set for user {chat_id} at {hour:02d}:{minute:02d}{timezone_info}"
             )
         except ValidationError:
             raise

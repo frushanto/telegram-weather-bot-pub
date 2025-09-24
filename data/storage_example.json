@@ -5,7 +5,8 @@
     "label": "Moscow, Russia",
     "language": "ru",
     "sub_hour": 8,
-    "sub_min": 0
+    "sub_min": 0,
+    "timezone": "Europe/Moscow"
   },
   "987654321": {
     "lat": 40.7128,
@@ -13,7 +14,8 @@
     "label": "New York, NY, USA",
     "language": "en",
     "sub_hour": 9,
-    "sub_min": 30
+    "sub_min": 30,
+    "timezone": "America/New_York"
   },
   "555666777": {
     "lat": 51.5074,
@@ -27,7 +29,8 @@
     "label": "Berlin, Deutschland",
     "language": "de",
     "sub_hour": 7,
-    "sub_min": 0
+    "sub_min": 0,
+    "timezone": "Europe/Berlin"
   },
   "777888999": {
     "language": "ru"

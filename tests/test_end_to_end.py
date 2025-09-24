@@ -169,7 +169,7 @@ class TestAllCommandsAllLanguages:
                 patch(
                     "weatherbot.handlers.commands.get_subscription_service"
                 ) as mock_sub_service,
-                patch("weatherbot.handlers.commands.schedule_daily"),
+                patch("weatherbot.handlers.commands.schedule_daily_timezone_aware"),
                 patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
                 patch("weatherbot.core.decorators.spam_protection") as mock_spam,
             ):
