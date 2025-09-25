@@ -12,8 +12,11 @@ from weatherbot.core.decorators import spam_check
 from weatherbot.core.exceptions import (
     GeocodeServiceError,
     ValidationError,
+    WeatherQuotaExceededError,
     WeatherServiceError,
 )
+from weatherbot.domain.conversation import ConversationMode
+from weatherbot.infrastructure.quota_notifications import notify_quota_if_needed
 from weatherbot.infrastructure.setup import (
     get_subscription_service,
     get_user_service,
@@ -24,11 +27,13 @@ from weatherbot.infrastructure.state import (
     awaiting_language_input,
     awaiting_sethome,
     awaiting_subscribe_time,
+    conversation_manager,
 )
 from weatherbot.jobs.scheduler import schedule_daily_timezone_aware
 from weatherbot.presentation.formatter import format_weather
 from weatherbot.presentation.i18n import i18n
 from weatherbot.presentation.keyboards import language_keyboard, main_keyboard
+from weatherbot.utils.time import format_reset_time
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +46,8 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         user_service = get_user_service()
         user_lang = await user_service.get_user_language(str(chat_id))
 
-        user_data = await user_service.get_user_data(str(chat_id))
-        if not user_data or "language" not in user_data:
+        profile = await user_service.get_user_profile(str(chat_id))
+        if not profile.language_explicit:
             multilingual_text = (
                 "Hello! Привет! Hallo! 🌍\n\n"
                 "I'm a weather bot that supports multiple languages.\n"
@@ -103,7 +108,10 @@ async def sethome_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
             user_service = get_user_service()
             user_lang = await user_service.get_user_language(str(chat_id))
-            awaiting_sethome[chat_id] = True
+            conversation_manager.set_awaiting_mode(
+                chat_id, ConversationMode.AWAITING_SETHOME
+            )
+            awaiting_sethome[chat_id] = True  # Legacy compatibility
 
             text = i18n.get("sethome_prompt", user_lang)
             await update.message.reply_text(text, reply_markup=main_keyboard(user_lang))
@@ -146,12 +154,12 @@ async def sethome_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 @spam_check
 async def home_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
+    home = None
     try:
         chat_id = update.effective_chat.id
         user_service = get_user_service()
         weather_service = get_weather_application_service()
         user_lang = await user_service.get_user_language(str(chat_id))
-
         home = await user_service.get_user_home(str(chat_id))
         if not home:
             text = i18n.get("home_not_set", user_lang)
@@ -159,15 +167,20 @@ async def home_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         weather_data = await weather_service.get_weather_by_coordinates(
-            home["lat"], home["lon"]
+            home.lat, home.lon
         )
 
-        msg = format_weather(
-            weather_data, place_label=home.get("label"), lang=user_lang
-        )
+        msg = format_weather(weather_data, place_label=home.label, lang=user_lang)
         await update.message.reply_text(
             msg, parse_mode="HTML", reply_markup=main_keyboard(user_lang)
         )
+        await notify_quota_if_needed(context.bot)
+    except WeatherQuotaExceededError as e:
+        tz_name = home.timezone if "home" in locals() and home else None
+        reset_text = format_reset_time(e.reset_at, tz_name)
+        text = i18n.get("weather_quota_exceeded", user_lang, reset_time=reset_text)
+        await update.message.reply_text(text, reply_markup=main_keyboard(user_lang))
+        await notify_quota_if_needed(context.bot)
     except WeatherServiceError as e:
         logger.warning(f"Weather service error in /home: {e}")
         user_lang = await get_user_service().get_user_language(
@@ -219,7 +232,10 @@ async def subscribe_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not args:
             user_service = get_user_service()
             user_lang = await user_service.get_user_language(str(chat_id))
-            awaiting_subscribe_time[chat_id] = True
+            conversation_manager.set_awaiting_mode(
+                chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
+            )
+            awaiting_subscribe_time[chat_id] = True  # Legacy compatibility
             text = i18n.get("subscribe_prompt", user_lang)
             await update.message.reply_text(text, reply_markup=main_keyboard(user_lang))
             return
@@ -306,6 +322,13 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     user_lang = await user_service.get_user_language(str(chat_id))
     cancelled = False
 
+    # Check new conversation state first
+    current_state = conversation_manager.get_state(chat_id)
+    if current_state.mode != ConversationMode.IDLE:
+        conversation_manager.clear_conversation(chat_id)
+        cancelled = True
+
+    # Legacy cleanup for backward compatibility
     for state in (
         awaiting_sethome,
         awaiting_subscribe_time,
@@ -358,7 +381,10 @@ async def language_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         language_instructions = i18n.get("language_selection_instructions", user_lang)
         multilang_text = language_header + language_instructions
 
-        awaiting_language_input[chat_id] = True
+        conversation_manager.set_awaiting_mode(
+            chat_id, ConversationMode.AWAITING_LANGUAGE_INPUT
+        )
+        awaiting_language_input[chat_id] = True  # Legacy compatibility
         await update.message.reply_text(
             multilang_text, reply_markup=main_keyboard(user_lang)
         )
@@ -386,36 +412,44 @@ async def data_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
         user_service = get_user_service()
 
+        profile = await user_service.get_user_profile(str(chat_id))
         default_lang = await user_service.get_user_language(str(chat_id))
-        user_data = await user_service.get_user_data(str(chat_id))
+        user_lang = profile.language or default_lang
 
-        user_lang = user_data.get("language", default_lang)
-        if not user_data:
+        if profile.is_empty():
             text = i18n.get("no_data_stored", user_lang)
             await update.message.reply_text(text, reply_markup=main_keyboard(user_lang))
             return
 
-        data_parts = []
-        data_parts.append(f"💾 {i18n.get('your_data', user_lang)}:")
-        if "lat" in user_data and "lon" in user_data:
-            home_label = user_data.get("label", i18n.get("unknown_location", user_lang))
+        data_parts = [f"💾 {i18n.get('your_data', user_lang)}:"]
+
+        if profile.home:
+            home_label = profile.home.label or i18n.get("unknown_location", user_lang)
             data_parts.append(f"🏠 {i18n.get('home_address', user_lang)}: {home_label}")
             data_parts.append(
-                f"📍 {i18n.get('coordinates', user_lang)}: {user_data['lat']:.4f}, {user_data['lon']:.4f}"
+                f"📍 {i18n.get('coordinates', user_lang)}: {profile.home.lat:.4f}, {profile.home.lon:.4f}"
             )
-        if "sub_hour" in user_data:
-            hour = user_data["sub_hour"]
-            minute = user_data.get("sub_min", 0)
+            if profile.home.timezone:
+                data_parts.append(
+                    f"🕒 {i18n.get('timezone', user_lang)}: {profile.home.timezone}"
+                )
+
+        if profile.subscription:
             timezone_info = ""
-            if "timezone" in user_data:
-                timezone_info = f" ({user_data['timezone']})"
+            if profile.home and profile.home.timezone:
+                timezone_info = f" ({profile.home.timezone})"
             data_parts.append(
-                f"🔔 {i18n.get('subscription', user_lang)}: {hour:02d}:{minute:02d}{timezone_info}"
+                f"🔔 {i18n.get('subscription', user_lang)}: {profile.subscription.hour:02d}:{profile.subscription.minute:02d}{timezone_info}"
             )
-        if "language" in user_data:
+
+        if profile.language:
             data_parts.append(
-                f"🌐 {i18n.get('language', user_lang)}: {user_data['language']}"
+                f"🌐 {i18n.get('language', user_lang)}: {profile.language}"
             )
+
+        for key, value in profile.extras.items():
+            data_parts.append(f"• {key}: {value}")
+
         text = "\n".join(data_parts)
         await update.message.reply_text(text, reply_markup=main_keyboard(user_lang))
     except Exception:
@@ -520,7 +554,10 @@ async def weather_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
         from weatherbot.handlers.messages import awaiting_city_weather
 
-        awaiting_city_weather[chat_id] = True
+        conversation_manager.set_awaiting_mode(
+            chat_id, ConversationMode.AWAITING_CITY_WEATHER
+        )
+        awaiting_city_weather[chat_id] = True  # Legacy compatibility
 
         await update.message.reply_text(
             i18n.get("enter_city", user_lang),

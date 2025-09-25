@@ -1,8 +1,14 @@
 import logging
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
-from ..core.exceptions import GeocodeServiceError, ValidationError, WeatherServiceError
+from ..core.exceptions import (
+    GeocodeServiceError,
+    ValidationError,
+    WeatherQuotaExceededError,
+    WeatherServiceError,
+)
 from ..domain.services import GeocodeService, WeatherService
+from ..domain.weather import WeatherReport
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +21,7 @@ class WeatherApplicationService:
         self._weather_service = weather_service
         self._geocode_service = geocode_service
 
-    async def get_weather_by_coordinates(self, lat: float, lon: float) -> Dict:
+    async def get_weather_by_coordinates(self, lat: float, lon: float) -> WeatherReport:
 
         try:
             if not (-90 <= lat <= 90):
@@ -27,11 +33,13 @@ class WeatherApplicationService:
             return weather_data
         except ValidationError:
             raise
+        except WeatherQuotaExceededError:
+            raise
         except Exception as e:
             logger.exception(f"Error getting weather for coordinates {lat}, {lon}")
             raise WeatherServiceError(f"Failed to get weather: {e}")
 
-    async def get_weather_by_city(self, city: str) -> Tuple[Dict, str]:
+    async def get_weather_by_city(self, city: str) -> Tuple[WeatherReport, str]:
 
         try:
             if not city or not city.strip():
@@ -47,6 +55,8 @@ class WeatherApplicationService:
             logger.info(f"Weather fetched for city {city} ({label})")
             return weather_data, label
         except (ValidationError, GeocodeServiceError):
+            raise
+        except WeatherQuotaExceededError:
             raise
         except Exception as e:
             logger.exception(f"Error getting weather for city {city}")

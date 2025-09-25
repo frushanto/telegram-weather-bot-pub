@@ -1,13 +1,18 @@
 import os
 import tempfile
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from weatherbot.application.subscription_service import SubscriptionService
 from weatherbot.application.user_service import UserService
 from weatherbot.application.weather_service import WeatherApplicationService
-from weatherbot.core.config import BotConfig, SpamConfig
+from weatherbot.core.config import (
+    BotConfig,
+    SpamConfig,
+    reset_config_provider,
+    set_config,
+)
 from weatherbot.core.container import Container
 from weatherbot.core.exceptions import StorageError, ValidationError
 from weatherbot.domain.repositories import UserRepository
@@ -16,11 +21,13 @@ from weatherbot.domain.services import (
     SpamProtectionService,
     WeatherService,
 )
+from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
 from weatherbot.infrastructure.external_services import (
     NominatimGeocodeService,
     OpenMeteoWeatherService,
 )
 from weatherbot.infrastructure.json_repository import JsonUserRepository
+from weatherbot.infrastructure.weather_quota import WeatherApiQuotaManager
 
 
 @pytest.mark.asyncio
@@ -29,12 +36,16 @@ async def test_container_setup():
     test_config = BotConfig(
         token="test_token", admin_ids=[123456], spam_config=SpamConfig()
     )
-    with patch("weatherbot.core.config._config", test_config):
+    set_config(test_config)
+    try:
         container = Container()
         container.clear()
 
         container.register_singleton(UserRepository, JsonUserRepository())
-        container.register_singleton(WeatherService, OpenMeteoWeatherService())
+        quota_manager = WeatherApiQuotaManager()
+        container.register_singleton(
+            WeatherService, OpenMeteoWeatherService(quota_manager)
+        )
         container.register_singleton(GeocodeService, NominatimGeocodeService())
 
         user_repo = container.get(UserRepository)
@@ -43,6 +54,8 @@ async def test_container_setup():
         assert user_repo is not None
         assert weather_service is not None
         assert geocode_service is not None
+    finally:
+        reset_config_provider()
 
 
 @pytest.mark.asyncio
@@ -111,9 +124,9 @@ async def test_user_service():
 
         home = await user_service.get_user_home(test_chat_id)
         assert home is not None
-        assert home["lat"] == 55.7558
-        assert home["lon"] == 37.6176
-        assert home["label"] == "Москва"
+        assert home.lat == 55.7558
+        assert home.lon == 37.6176
+        assert home.label == "Москва"
 
         with pytest.raises(ValidationError):
             await user_service.set_user_home(test_chat_id, 91.0, 0, "Неверная широта")
@@ -148,7 +161,9 @@ async def test_subscription_service():
         await subscription_service.set_subscription(test_chat_id, 8, 30)
 
         subscription = await subscription_service.get_subscription(test_chat_id)
-        assert subscription == (8, 30)
+        assert subscription is not None
+        assert subscription.hour == 8
+        assert subscription.minute == 30
 
         with pytest.raises(ValidationError):
             await subscription_service.set_subscription(test_chat_id, 25, 0)
@@ -195,7 +210,25 @@ async def test_weather_application_service():
         mock_weather_service, mock_geocode_service
     )
 
-    mock_weather_data = {"temperature": 20, "weather_code": 0}
+    mock_weather_data = WeatherReport(
+        current=WeatherCurrent(
+            temperature=20.0,
+            apparent_temperature=19.0,
+            wind_speed=5.0,
+            weather_code=0,
+        ),
+        daily=[
+            WeatherDaily(
+                min_temperature=15.0,
+                max_temperature=25.0,
+                precipitation_probability=10.0,
+                sunrise="2025-01-01T08:00",
+                sunset="2025-01-01T17:00",
+                wind_speed_max=12.0,
+                weather_code=1,
+            )
+        ],
+    )
     mock_weather_service.get_weather.return_value = mock_weather_data
     mock_geocode_service.geocode_city.return_value = (55.7558, 37.6176, "Москва")
 

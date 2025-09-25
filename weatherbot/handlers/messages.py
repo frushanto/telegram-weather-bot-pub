@@ -13,9 +13,12 @@ from weatherbot.core.exceptions import (
     GeocodeServiceError,
     StorageError,
     ValidationError,
+    WeatherQuotaExceededError,
     WeatherServiceError,
 )
+from weatherbot.domain.conversation import ConversationMode
 from weatherbot.handlers.commands import parse_language_input
+from weatherbot.infrastructure.quota_notifications import notify_quota_if_needed
 from weatherbot.infrastructure.setup import (
     get_subscription_service,
     get_user_service,
@@ -26,6 +29,7 @@ from weatherbot.infrastructure.state import (
     awaiting_language_input,
     awaiting_sethome,
     awaiting_subscribe_time,
+    conversation_manager,
     last_location_by_chat,
 )
 from weatherbot.jobs.scheduler import schedule_daily_timezone_aware
@@ -35,6 +39,7 @@ from weatherbot.presentation.keyboards import (
     BTN_LANGUAGE,
     main_keyboard,
 )
+from weatherbot.utils.time import format_reset_time
 
 logger = logging.getLogger(__name__)
 
@@ -50,13 +55,25 @@ async def on_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         weather_service = get_weather_application_service()
 
         user_lang = await user_service.get_user_language(str(chat_id))
-        last_location_by_chat[chat_id] = (lat, lon)
+        conversation_manager.set_location(chat_id, lat, lon)
+        last_location_by_chat[chat_id] = (lat, lon)  # Legacy compatibility
 
         weather_data = await weather_service.get_weather_by_coordinates(lat, lon)
         msg = format_weather(weather_data, lang=user_lang)
         await update.message.reply_text(
             msg, parse_mode="HTML", reply_markup=main_keyboard(user_lang)
         )
+        await notify_quota_if_needed(context.bot)
+
+    except WeatherQuotaExceededError as e:
+        profile = await user_service.get_user_profile(str(chat_id))
+        tz_name = profile.home.timezone if profile.home else None
+        reset_text = format_reset_time(e.reset_at, tz_name)
+        await update.message.reply_text(
+            i18n.get("weather_quota_exceeded", user_lang, reset_time=reset_text),
+            reply_markup=main_keyboard(user_lang),
+        )
+        await notify_quota_if_needed(context.bot)
 
     except (WeatherServiceError, ValidationError) as e:
         logger.error(f"Error getting weather by coordinates for {chat_id}: {e}")
@@ -94,20 +111,15 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             user_lang = "ru"
 
         if text.strip().lower() == "/cancel":
-            cancelled = False
-            if chat_id in awaiting_sethome:
+            current_state = conversation_manager.get_state(chat_id)
+            if current_state.mode != ConversationMode.IDLE:
+                conversation_manager.clear_conversation(chat_id)
+                # Legacy compatibility cleanup
                 awaiting_sethome.pop(chat_id, None)
-                cancelled = True
-            if chat_id in awaiting_subscribe_time:
                 awaiting_subscribe_time.pop(chat_id, None)
-                cancelled = True
-            if chat_id in awaiting_city_weather:
                 awaiting_city_weather.pop(chat_id, None)
-                cancelled = True
-            if chat_id in awaiting_language_input:
                 awaiting_language_input.pop(chat_id, None)
-                cancelled = True
-            if cancelled:
+
                 await update.message.reply_text(
                     i18n.get("operation_cancelled", user_lang),
                     reply_markup=main_keyboard(user_lang),
@@ -120,8 +132,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         unset_home_label = i18n.get("remove_home_button", user_lang)
         help_label = i18n.get("help_button", user_lang)
 
-        if chat_id in awaiting_subscribe_time:
-            awaiting_subscribe_time.pop(chat_id, None)
+        if conversation_manager.is_awaiting(
+            chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
+        ):
+            conversation_manager.clear_conversation(chat_id)
+            awaiting_subscribe_time.pop(chat_id, None)  # Legacy cleanup
             subscription_service = get_subscription_service()
             try:
                 hour, minute = await subscription_service.parse_time_string(text)
@@ -155,8 +170,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
             return
 
-        if chat_id in awaiting_language_input:
-            awaiting_language_input.pop(chat_id, None)
+        if conversation_manager.is_awaiting(
+            chat_id, ConversationMode.AWAITING_LANGUAGE_INPUT
+        ):
+            conversation_manager.clear_conversation(chat_id)
+            awaiting_language_input.pop(chat_id, None)  # Legacy cleanup
             try:
 
                 new_language = parse_language_input(text)
@@ -186,11 +204,13 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
             return
 
-        if chat_id in awaiting_sethome:
-            awaiting_sethome.pop(chat_id, None)
+        if conversation_manager.is_awaiting(chat_id, ConversationMode.AWAITING_SETHOME):
+            conversation_manager.clear_conversation(chat_id)
+            awaiting_sethome.pop(chat_id, None)  # Legacy cleanup
             try:
-                if chat_id in last_location_by_chat:
-                    lat, lon = last_location_by_chat[chat_id]
+                last_location = conversation_manager.get_last_location(chat_id)
+                if last_location:
+                    lat, lon = last_location
                     await user_service.set_user_home(str(chat_id), lat, lon, text)
                     await update.message.reply_text(
                         i18n.get(
@@ -236,8 +256,11 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
                 return
 
-        if chat_id in awaiting_city_weather:
-            awaiting_city_weather.pop(chat_id, None)
+        if conversation_manager.is_awaiting(
+            chat_id, ConversationMode.AWAITING_CITY_WEATHER
+        ):
+            conversation_manager.clear_conversation(chat_id)
+            awaiting_city_weather.pop(chat_id, None)  # Legacy cleanup
             try:
                 weather_data, label = await weather_service.get_weather_by_city(text)
                 msg = format_weather(
@@ -246,11 +269,23 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 await update.message.reply_text(
                     msg, parse_mode="HTML", reply_markup=main_keyboard(user_lang)
                 )
+                await notify_quota_if_needed(context.bot)
             except GeocodeServiceError:
                 await update.message.reply_text(
                     i18n.get("city_not_found", user_lang),
                     reply_markup=main_keyboard(user_lang),
                 )
+            except WeatherQuotaExceededError as e:
+                home = await user_service.get_user_home(str(chat_id))
+                tz_name = home.timezone if home else None
+                reset_text = format_reset_time(e.reset_at, tz_name)
+                await update.message.reply_text(
+                    i18n.get(
+                        "weather_quota_exceeded", user_lang, reset_time=reset_text
+                    ),
+                    reply_markup=main_keyboard(user_lang),
+                )
+                await notify_quota_if_needed(context.bot)
             except (ValidationError, WeatherServiceError) as e:
                 logger.error(
                     f"Error getting weather for city {text}, user {chat_id}: {e}"
@@ -262,20 +297,31 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         if text == weather_home_label:
+            home = None
             try:
                 home = await user_service.get_user_home(str(chat_id))
                 if not home:
                     raise ValidationError("Home not set")
-                user_data = await user_service.get_user_data(str(chat_id))
                 weather_data = await weather_service.get_weather_by_coordinates(
-                    home["lat"], home["lon"]
+                    home.lat, home.lon
                 )
                 msg = format_weather(
-                    weather_data, place_label=user_data.get("label"), lang=user_lang
+                    weather_data, place_label=home.label, lang=user_lang
                 )
                 await update.message.reply_text(
                     msg, parse_mode="HTML", reply_markup=main_keyboard(user_lang)
                 )
+                await notify_quota_if_needed(context.bot)
+            except WeatherQuotaExceededError as e:
+                tz_name = home.timezone if "home" in locals() and home else None
+                reset_text = format_reset_time(e.reset_at, tz_name)
+                await update.message.reply_text(
+                    i18n.get(
+                        "weather_quota_exceeded", user_lang, reset_time=reset_text
+                    ),
+                    reply_markup=main_keyboard(user_lang),
+                )
+                await notify_quota_if_needed(context.bot)
             except ValidationError:
                 await update.message.reply_text(
                     i18n.get("home_not_set", user_lang),
@@ -289,14 +335,20 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
 
         elif text == weather_city_label:
-            awaiting_city_weather[chat_id] = True
+            conversation_manager.set_awaiting_mode(
+                chat_id, ConversationMode.AWAITING_CITY_WEATHER
+            )
+            awaiting_city_weather[chat_id] = True  # Legacy compatibility
             await update.message.reply_text(
                 i18n.get("enter_city", user_lang),
                 reply_markup=main_keyboard(user_lang),
             )
 
         elif text == set_home_label:
-            awaiting_sethome[chat_id] = True
+            conversation_manager.set_awaiting_mode(
+                chat_id, ConversationMode.AWAITING_SETHOME
+            )
+            awaiting_sethome[chat_id] = True  # Legacy compatibility
             await update.message.reply_text(
                 i18n.get("enter_home_city", user_lang),
                 reply_markup=main_keyboard(user_lang),
@@ -356,6 +408,17 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     i18n.get("unknown_command", user_lang),
                     reply_markup=main_keyboard(user_lang),
                 )
+            except WeatherQuotaExceededError as e:
+                profile = await user_service.get_user_profile(str(chat_id))
+                tz_name = profile.home.timezone if profile.home else None
+                reset_text = format_reset_time(e.reset_at, tz_name)
+                await update.message.reply_text(
+                    i18n.get(
+                        "weather_quota_exceeded", user_lang, reset_time=reset_text
+                    ),
+                    reply_markup=main_keyboard(user_lang),
+                )
+                await notify_quota_if_needed(context.bot)
             except (ValidationError, WeatherServiceError) as e:
                 logger.error(f"Error getting weather for {text}, user {chat_id}: {e}")
                 await update.message.reply_text(

@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Tuple
 
+from .weather import WeatherReport
+
 
 class WeatherService(ABC):
 
     @abstractmethod
-    async def get_weather(self, lat: float, lon: float) -> Dict:
+    async def get_weather(self, lat: float, lon: float) -> WeatherReport:
 
         pass
 

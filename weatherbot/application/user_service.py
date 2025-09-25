@@ -3,6 +3,7 @@ from typing import Dict, Optional
 
 from ..core.exceptions import StorageError, ValidationError
 from ..domain.repositories import UserRepository
+from ..domain.value_objects import UserHome, UserProfile
 
 logger = logging.getLogger(__name__)
 
@@ -13,24 +14,11 @@ class UserService:
         self._user_repo = user_repository
         self._timezone_service = timezone_service
 
-    async def get_user_home(self, chat_id: str) -> Optional[Dict]:
+    async def get_user_home(self, chat_id: str) -> Optional[UserHome]:
 
         try:
-            user_data = await self._user_repo.get_user_data(str(chat_id))
-            if not user_data:
-                return None
-
-            if all(key in user_data for key in ["lat", "lon", "label"]):
-                home_data = {
-                    "lat": user_data["lat"],
-                    "lon": user_data["lon"],
-                    "label": user_data["label"],
-                }
-                # Include timezone if available
-                if "timezone" in user_data:
-                    home_data["timezone"] = user_data["timezone"]
-                return home_data
-            return None
+            profile = await self.get_user_profile(chat_id)
+            return profile.home
         except Exception as e:
             logger.exception(f"Error getting home location for user {chat_id}")
             raise StorageError(f"Failed to get home location: {e}")
@@ -47,8 +35,8 @@ class UserService:
             if not label or not label.strip():
                 raise ValidationError("Location label cannot be empty")
 
-            user_data = await self._user_repo.get_user_data(str(chat_id)) or {}
-            user_data.update({"lat": lat, "lon": lon, "label": label.strip()})
+            profile = await self.get_user_profile(chat_id)
+            home = UserHome(lat=lat, lon=lon, label=label.strip())
 
             # Automatically determine timezone if timezone_service is available
             if self._timezone_service:
@@ -56,7 +44,7 @@ class UserService:
                     lat, lon
                 )
                 if timezone_name:
-                    user_data["timezone"] = timezone_name
+                    home = home.with_timezone(timezone_name)
                     logger.info(
                         f"Automatically set timezone '{timezone_name}' for user {chat_id}"
                     )
@@ -64,44 +52,39 @@ class UserService:
                     logger.warning(
                         f"Could not determine timezone for coordinates {lat:.4f}, {lon:.4f} for user {chat_id}"
                     )
-
-            await self._user_repo.save_user_data(str(chat_id), user_data)
+            profile.home = home
+            await self._user_repo.save_user_data(str(chat_id), profile.to_storage())
             logger.info(f"Home location set for user {chat_id}: {label}")
         except ValidationError:
             raise
         except Exception as e:
             logger.exception(f"Error setting home location for user {chat_id}")
             raise StorageError(f"Failed to set home location: {e}")
-            logger.exception(f"Error setting home location for user {chat_id}")
-            raise StorageError(f"Failed to set home location: {e}")
 
     async def remove_user_home(self, chat_id: str) -> bool:
 
         try:
-            user_data = await self._user_repo.get_user_data(str(chat_id))
-            if not user_data:
+            profile = await self.get_user_profile(chat_id)
+            if not profile.home:
                 return False
 
-            home_keys = ["lat", "lon", "label", "timezone"]  # Include timezone
-            had_home = any(key in user_data for key in home_keys)
-            for key in home_keys:
-                user_data.pop(key, None)
+            profile.home = None
 
-            if user_data:
-                await self._user_repo.save_user_data(str(chat_id), user_data)
-            else:
-
+            if profile.is_empty():
                 await self._user_repo.delete_user_data(str(chat_id))
-            if had_home:
-                logger.info(f"Home location removed for user {chat_id}")
-            return had_home
+            else:
+                await self._user_repo.save_user_data(str(chat_id), profile.to_storage())
+
+            logger.info(f"Home location removed for user {chat_id}")
+            return True
         except Exception as e:
             logger.exception(f"Error removing home location for user {chat_id}")
             raise StorageError(f"Failed to remove home location: {e}")
 
     async def get_user_language(self, chat_id: str) -> str:
         try:
-            return await self._user_repo.get_user_language(str(chat_id))
+            profile = await self.get_user_profile(chat_id)
+            return profile.language or "ru"
         except Exception:
             logger.exception(f"Error getting user language {chat_id}")
             return "ru"
@@ -115,7 +98,10 @@ class UserService:
                 raise ValidationError(
                     f"Unsupported language: {language}. Allowed: {allowed_languages}"
                 )
-            await self._user_repo.set_user_language(str(chat_id), language)
+            profile = await self.get_user_profile(chat_id)
+            profile.language = language
+            profile.language_explicit = True
+            await self._user_repo.save_user_data(str(chat_id), profile.to_storage())
             logger.info(f"Language {language} set for user {chat_id}")
         except ValidationError:
             raise
@@ -126,8 +112,10 @@ class UserService:
     async def get_user_data(self, chat_id: str) -> Dict:
 
         try:
-            user_data = await self._user_repo.get_user_data(str(chat_id))
-            return user_data or {}
+            profile = await self.get_user_profile(chat_id)
+            if profile.is_empty():
+                return {}
+            return profile.to_storage()
         except Exception as e:
             logger.exception(f"Error getting user data {chat_id}")
             raise StorageError(f"Failed to get user data: {e}")
@@ -142,3 +130,12 @@ class UserService:
         except Exception as e:
             logger.exception(f"Error deleting user data {chat_id}")
             raise StorageError(f"Failed to delete user data: {e}")
+
+    async def get_user_profile(self, chat_id: str) -> UserProfile:
+
+        try:
+            raw_data = await self._user_repo.get_user_data(str(chat_id)) or {}
+            return UserProfile.from_storage(raw_data)
+        except Exception as e:
+            logger.exception(f"Error retrieving profile for user {chat_id}")
+            raise StorageError(f"Failed to get user profile: {e}")

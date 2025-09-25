@@ -1,13 +1,25 @@
-__version__ = "2.2.0"
-__version_info__ = (2, 2, 0)
-__release_date__ = "23.09.2025"
+__version__ = "3.0.0"
+__version_info__ = (3, 0, 0)
+__release_date__ = "25.09.2025"
 __supported_languages__ = "Русский, English, Deutsch"
 
 RELEASE_NOTES = """
-🚀 Version 2.2.0 - Timezone-aware scheduling for subscriptions
-================================================================
+🎉 New in 3.0.0
+---------------
+- ✅ Value Object Architecture: Complete migration to immutable value objects throughout all layers
+- ✅ Conversation State Management: New ConversationStateManager with structured state tracking
+- ✅ Admin System Overhaul: New AdminApplicationService with structured value object returns
+- ✅ Admin Value Objects: AdminStatsResult, AdminUserInfo, AdminConfigSnapshot, AdminTestWeatherResult
+- ✅ Weather Quota System: Global API quota management with notifications (WeatherApiQuotaManager)
+- ✅ Enhanced Type Safety: Comprehensive type system with rich domain objects (UserProfile, UserHome, UserSubscription)
+- ✅ Improved Testing: 218 tests passing with enhanced value object testing patterns
+- ✅ Clean Architecture: Enhanced DDD implementation with pure value object patterns
+- ✅ Modular DI Container: Enhanced dependency injection with override capabilities
+- ✅ Documentation Updates: Comprehensive architecture and contributing guidelines updates
+- ⚠️  BREAKING CHANGES: Handler layer now uses structured conversation state instead of global dicts
 
-📅 Release date: 23.09.2025
+Previous Releases
+==================
 
 ✨ New in 2.2.0
 ---------------

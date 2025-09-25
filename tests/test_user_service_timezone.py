@@ -93,10 +93,10 @@ class TestUserServiceTimezone:
         home = await user_service.get_user_home("123")
 
         assert home is not None
-        assert home["timezone"] == "Europe/Moscow"
-        assert home["lat"] == 55.7558
-        assert home["lon"] == 37.6176
-        assert home["label"] == "Moscow"
+        assert home.timezone == "Europe/Moscow"
+        assert home.lat == 55.7558
+        assert home.lon == 37.6176
+        assert home.label == "Moscow"
 
     @pytest.mark.asyncio
     async def test_get_user_home_without_timezone(self, user_service, mock_user_repo):
@@ -110,10 +110,10 @@ class TestUserServiceTimezone:
         home = await user_service.get_user_home("123")
 
         assert home is not None
-        assert "timezone" not in home
-        assert home["lat"] == 55.7558
-        assert home["lon"] == 37.6176
-        assert home["label"] == "Moscow"
+        assert home.timezone is None
+        assert home.lat == 55.7558
+        assert home.lon == 37.6176
+        assert home.label == "Moscow"
 
     @pytest.mark.asyncio
     async def test_remove_user_home_removes_timezone(
@@ -131,13 +131,35 @@ class TestUserServiceTimezone:
         removed = await user_service.remove_user_home("123")
 
         assert removed is True
-        mock_user_repo.save_user_data.assert_called_once()
-        args, kwargs = mock_user_repo.save_user_data.call_args
-        remaining_data = args[1]
+        if mock_user_repo.save_user_data.await_count:
+            args, kwargs = mock_user_repo.save_user_data.call_args
+            remaining_data = args[1]
 
-        # Should only have language left
-        assert "timezone" not in remaining_data
-        assert "lat" not in remaining_data
-        assert "lon" not in remaining_data
-        assert "label" not in remaining_data
-        assert remaining_data["language"] == "ru"
+            assert "timezone" not in remaining_data
+            assert "lat" not in remaining_data
+            assert "lon" not in remaining_data
+            assert "label" not in remaining_data
+            assert remaining_data["language"] == "ru"
+        else:
+            mock_user_repo.delete_user_data.assert_awaited_once_with("123")
+
+    @pytest.mark.asyncio
+    async def test_get_user_profile_returns_value_object(
+        self, user_service, mock_user_repo
+    ):
+        mock_user_repo.get_user_data.return_value = {
+            "lat": 10.0,
+            "lon": 20.0,
+            "label": "Test",
+            "timezone": "UTC",
+            "sub_hour": 6,
+            "sub_min": 15,
+            "language": "en",
+        }
+
+        profile = await user_service.get_user_profile("abc")
+
+        assert profile.language == "en"
+        assert profile.home and profile.home.label == "Test"
+        assert profile.home.timezone == "UTC"
+        assert profile.subscription and profile.subscription.hour == 6

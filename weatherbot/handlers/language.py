@@ -21,13 +21,13 @@ async def language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     try:
         user_service = get_user_service()
+        profile_before = await user_service.get_user_profile(str(chat_id))
         await user_service.set_user_language(str(chat_id), lang)
 
         lang_names = {"en": "English", "ru": "Русский", "de": "Deutsch"}
         language_name = lang_names.get(lang, lang)
 
-        user_data = await user_service.get_user_data(str(chat_id))
-        is_first_time = not user_data or len(user_data) == 1  # Only language is set
+        is_first_time = profile_before.is_empty()
 
         await update.callback_query.answer()
 

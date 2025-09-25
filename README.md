@@ -1,7 +1,7 @@
 # Telegram Weather Bot
 
 [![CI/CD Pipeline](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml/badge.svg)](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](weatherbot/__version__.py)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](weatherbot/__version__.py)
 [![Python](https://img.shields.io/badge/python-3.12-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
@@ -23,7 +23,9 @@ Telegram Weather Bot is an asynchronous Telegram bot that provides real-time wea
 - 🛡️ **Spam Protection**: Built-in rate limiting and abuse prevention
 - 🔒 **Privacy First**: Secure data handling with user data deletion options
 - ⚙️ **Admin Controls**: Configurable admin language and management features
-- 🏗️ **Clean Architecture**: Built with DDD principles and dependency injection
+- 📈 **Global API Quota**: Shared 24-hour weather API budget with reset notifications
+- 🏗️ **Clean Architecture**: Built with DDD principles, dependency injection, and pure value object patterns
+- 🎯 **Type Safety**: Comprehensive value object system with immutable conversation state management
 
 ## 🚀 Quick Start
 
@@ -60,9 +62,13 @@ Telegram Weather Bot is an asynchronous Telegram bot that provides real-time wea
    ```env
    BOT_TOKEN=your_telegram_bot_token_here
    # No WEATHER_API_KEY required for the default Open-Meteo provider
-   ADMIN_IDS=123456789,987654321  # Optional: Admin user IDs
-   ADMIN_LANGUAGE=en              # Optional: Admin interface language
-   DATA_FILE=data/storage.json    # Optional: Data storage file path
+   ADMIN_IDS=123456789,987654321   # Optional: Admin user IDs
+   ADMIN_LANGUAGE=ru               # Optional: Admin interface language (ru/en/de)
+   STORAGE_PATH=data/storage.json  # Optional: JSON storage location
+   WEATHER_API_DAILY_LIMIT=1000    # Optional: Shared daily API budget
+   WEATHER_API_QUOTA_PATH=data/weather_api_quota.json  # Optional: Quota storage file
+   WEATHER_SERVICE_PROVIDER=open-meteo  # Optional: Weather provider key
+   GEOCODE_SERVICE_PROVIDER=nominatim   # Optional: Geocoding provider key
    ```
 
    - **Security note:** Do NOT commit your `.env` file or any real tokens/keys to the repository. The repository keeps only `.env.*.example` files. If you accidentally commit secrets, rotate them immediately and follow git-history cleanup procedures.
@@ -111,6 +117,11 @@ These commands are available to configured admin users (set `ADMIN_IDS` in your 
 - `/admin_user_info <user_id>` - Show detailed info and spam stats for a specific user
 - `/admin_unblock <user_id>` - Remove a user from the blocked list
 - `/admin_cleanup` - Cleanup old spam protection data and temporary records
+- `/admin_subscriptions` - List active daily weather subscriptions
+- `/admin_backup` - Trigger a manual storage backup
+- `/admin_config` - Show runtime configuration snapshot (timezone, backups, spam limits)
+- `/admin_test_weather <city>` - Fetch weather data for troubleshooting
+- `/admin_quota` - Inspect shared weather API usage and next reset time
 - `/admin_version` - Show current bot version, release date and supported languages
 - `/admin_help` - Show a help message with admin command descriptions and examples
 
@@ -216,6 +227,16 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 - Issue reporting
 - Development workflow
 
+#### Dependency Overrides
+- Use the override helpers from `weatherbot.infrastructure.container` when swapping integrations in tests or experiments.
+- Example:
+  ```python
+  from weatherbot.infrastructure.container import register_external_clients, override_weather_service
+
+  register_external_clients(config, overrides=override_weather_service(lambda: FakeWeather()))
+  ```
+- This keeps the DI graph consistent and avoids brittle monkeypatches.
+
 ## 📝 Configuration
 
 ### Environment Variables
@@ -224,10 +245,16 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 |----------|----------|---------|-------------|
 | `BOT_TOKEN` | ✅ | - | Telegram Bot Token from BotFather |
 | `ADMIN_IDS` | ❌ | - | Comma-separated admin user IDs |
-| `ADMIN_LANGUAGE` | ❌ | `en` | Admin interface language (en/ru/de) |
-| `DATA_FILE` | ❌ | `data/storage.json` | Data storage file path |
-| `LOG_LEVEL` | ❌ | `INFO` | Logging level (DEBUG/INFO/WARNING/ERROR) |
-| `TIMEZONE` | ❌ | `UTC` | Timezone for scheduled tasks |
+| `ADMIN_LANGUAGE` | ❌ | `ru` | Admin interface language (ru/en/de) |
+| `STORAGE_PATH` | ❌ | `data/storage.json` | Path to persisted user data |
+| `TIMEZONE` | ❌ | `Europe/Berlin` | Timezone for scheduled jobs (backups, subscriptions) |
+| `BACKUP_ENABLED` | ❌ | `true` | Enable or disable daily backups |
+| `BACKUP_RETENTION_DAYS` | ❌ | `30` | How many days to keep backup files |
+| `BACKUP_TIME_HOUR` | ❌ | `3` | Hour of day (local time) to run backups |
+| `WEATHER_API_DAILY_LIMIT` | ❌ | `1000` | Shared rolling 24h weather API limit |
+| `WEATHER_API_QUOTA_PATH` | ❌ | `data/weather_api_quota.json` | Quota tracking storage file |
+
+See [CONFIG.md](CONFIG.md) for the full list, including spam protection tuning.
 
 ### Storage
 
@@ -319,23 +346,30 @@ The bot uses Open-Meteo for weather data and Nominatim (OpenStreetMap) for geoco
 
 ### Debug Mode
 
-Enable debug logging:
+Enable debug logging by temporarily setting `logging.basicConfig(... level=logging.DEBUG)` in `app.py`, then run:
 ```bash
-LOG_LEVEL=DEBUG python app.py
+python app.py
 ```
 
 ## 📈 Changelog
 
 See `weatherbot/__version__.RELEASE_NOTES` for detailed version history and updates.
 
-## 🆕 What's New — Version 2.2.0
+## 🆕 What's New — Version 3.0.0
 
-This release introduces timezone-aware scheduling and improves developer workflow:
+### 🎯 Major Release Highlights
+- **🏗️ Value Object Architecture**: Complete architectural transformation with immutable value objects throughout all layers
+- **�️ Admin System Overhaul**: New structured admin service with comprehensive management capabilities
+- **🔧 Infrastructure Revolution**: Enhanced DI container, weather quota system, and configuration management
+- **�🎯 Conversation State Management**: Replaced global dict state with structured `ConversationStateManager`
+- **🔒 Type Safety**: Rich domain objects (`UserProfile`, `ConversationState`, `AdminStatsResult`, `WeatherQuotaStatus`)
+- **🧪 Enhanced Testing**: 218 tests with improved patterns and comprehensive coverage
 
-- **Timezone Support**: Daily weather subscriptions now support user-specific time zones for accurate delivery scheduling.
-- **Improved Makefile**: Fixed `.env` file loading on both POSIX and Windows systems for reliable development environment setup.
-- **Enhanced Testing**: Added comprehensive tests for DST edge cases and timezone transitions.
-- **Developer Experience**: Better cross-platform compatibility and improved CI reliability.
+### 📈 Performance & Reliability
+- **Global API Quota**: Intelligent weather API budget management with automatic notifications
+- **Timezone Support**: User-specific time zones for accurate subscription delivery
+- **Improved Error Handling**: Structured exceptions and better user feedback
+- **Enhanced Security**: Better input validation and spam protection
 
 For full release notes see `weatherbot.__version__.RELEASE_NOTES` or the project's changelog when available.
 

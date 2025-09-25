@@ -3,6 +3,11 @@ from typing import Dict, List, Optional, Tuple
 
 from ..core.exceptions import StorageError, ValidationError
 from ..domain.repositories import UserRepository
+from ..domain.value_objects import (
+    SubscriptionEntry,
+    UserProfile,
+    UserSubscription,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,20 +26,20 @@ class SubscriptionService:
             if not (0 <= minute <= 59):
                 raise ValidationError(f"Invalid minute: {minute}. Must be 0-59")
 
-            user_data = await self._user_repo.get_user_data(str(chat_id)) or {}
+            raw_data = await self._user_repo.get_user_data(str(chat_id)) or {}
+            profile = UserProfile.from_storage(raw_data)
 
-            # Check if user has home location set
-            if not all(key in user_data for key in ["lat", "lon", "label"]):
+            if profile.home is None:
                 raise ValidationError(
                     "Home location must be set before subscribing to weather notifications"
                 )
 
-            user_data.update({"sub_hour": hour, "sub_min": minute})
-            await self._user_repo.save_user_data(str(chat_id), user_data)
+            profile.subscription = UserSubscription(hour=hour, minute=minute)
+            await self._user_repo.save_user_data(str(chat_id), profile.to_storage())
 
             timezone_info = ""
-            if "timezone" in user_data:
-                timezone_info = f" (timezone: {user_data['timezone']})"
+            if profile.home and profile.home.timezone:
+                timezone_info = f" (timezone: {profile.home.timezone})"
 
             logger.info(
                 f"Subscription set for user {chat_id} at {hour:02d}:{minute:02d}{timezone_info}"
@@ -52,54 +57,52 @@ class SubscriptionService:
             if not user_data:
                 return False
 
-            had_subscription = "sub_hour" in user_data
+            profile = UserProfile.from_storage(user_data)
+            had_subscription = profile.subscription is not None
+            if not had_subscription:
+                return False
 
-            user_data.pop("sub_hour", None)
-            user_data.pop("sub_min", None)
+            profile.subscription = None
 
-            if user_data:
-                await self._user_repo.save_user_data(str(chat_id), user_data)
-            else:
+            if profile.is_empty():
                 await self._user_repo.delete_user_data(str(chat_id))
-            if had_subscription:
-                logger.info(f"Subscription removed for user {chat_id}")
-            return had_subscription
+            else:
+                await self._user_repo.save_user_data(str(chat_id), profile.to_storage())
+            logger.info(f"Subscription removed for user {chat_id}")
+            return True
         except Exception as e:
             logger.exception(f"Error removing subscription for user {chat_id}")
             raise StorageError(f"Failed to remove subscription: {e}")
 
-    async def get_subscription(self, chat_id: str) -> Optional[Tuple[int, int]]:
+    async def get_subscription(self, chat_id: str) -> Optional[UserSubscription]:
 
         try:
             user_data = await self._user_repo.get_user_data(str(chat_id))
             if not user_data:
                 return None
-            hour = user_data.get("sub_hour")
-            minute = user_data.get("sub_min", 0)
-            if isinstance(hour, int) and 0 <= hour <= 23:
-                return hour, int(minute) if isinstance(minute, int) else 0
-            return None
+            profile = UserProfile.from_storage(user_data)
+            return profile.subscription
         except Exception:
             logger.exception(f"Error retrieving subscription for user {chat_id}")
             return None
 
-    async def get_all_subscriptions(self) -> List[Dict]:
+    async def get_all_subscriptions(self) -> List[SubscriptionEntry]:
 
         try:
             all_users = await self._user_repo.get_all_users()
-            subscriptions = []
+            subscriptions: List[SubscriptionEntry] = []
             for chat_id, user_data in all_users.items():
-                hour = user_data.get("sub_hour")
-                minute = user_data.get("sub_min", 0)
-                if isinstance(hour, int) and 0 <= hour <= 23:
-                    subscriptions.append(
-                        {
-                            "chat_id": chat_id,
-                            "hour": hour,
-                            "minute": int(minute) if isinstance(minute, int) else 0,
-                            "user_data": user_data,
-                        }
+                profile = UserProfile.from_storage(user_data)
+                if not profile.subscription:
+                    continue
+                subscriptions.append(
+                    SubscriptionEntry(
+                        chat_id=str(chat_id),
+                        subscription=profile.subscription,
+                        home=profile.home,
+                        language=profile.language,
                     )
+                )
             logger.debug(f"Found {len(subscriptions)} active subscriptions")
             return subscriptions
         except Exception as e:
@@ -110,14 +113,11 @@ class SubscriptionService:
 
         return await self.remove_subscription(chat_id)
 
-    async def get_subscription_info(self, chat_id: str) -> Optional[Dict]:
+    async def get_subscription_info(self, chat_id: str) -> Optional[UserSubscription]:
 
         try:
             subscription = await self.get_subscription(chat_id)
-            if subscription:
-                hour, minute = subscription
-                return {"hour": hour, "minute": minute}
-            return None
+            return subscription
         except Exception:
             logger.exception(f"Error retrieving subscription info for {chat_id}")
             return None
@@ -127,8 +127,11 @@ class SubscriptionService:
         try:
             subscriptions = await self.get_all_subscriptions()
             result = {}
-            for sub in subscriptions:
-                result[sub["chat_id"]] = {"hour": sub["hour"], "minute": sub["minute"]}
+            for entry in subscriptions:
+                result[entry.chat_id] = {
+                    "hour": entry.subscription.hour,
+                    "minute": entry.subscription.minute,
+                }
             return result
         except Exception:
             logger.exception("Error building subscriptions dictionary")

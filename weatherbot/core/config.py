@@ -1,6 +1,7 @@
 import os
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -34,6 +35,10 @@ class BotConfig:
     backup_enabled: bool = True
     backup_retention_days: int = 30
     backup_time_hour: int = 3
+    weather_api_daily_limit: int = 1000
+    weather_api_quota_path: str = "data/weather_api_quota.json"
+    weather_service_provider: str = "open-meteo"
+    geocode_service_provider: str = "nominatim"
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -82,6 +87,16 @@ class BotConfig:
         }
         backup_retention_days = int(os.getenv("BACKUP_RETENTION_DAYS", "30"))
         backup_time_hour = int(os.getenv("BACKUP_TIME_HOUR", "3"))
+        weather_api_daily_limit = int(os.getenv("WEATHER_API_DAILY_LIMIT", "1000"))
+        weather_api_quota_path = os.getenv(
+            "WEATHER_API_QUOTA_PATH", "data/weather_api_quota.json"
+        )
+        weather_service_provider = os.getenv(
+            "WEATHER_SERVICE_PROVIDER", "open-meteo"
+        ).lower()
+        geocode_service_provider = os.getenv(
+            "GEOCODE_SERVICE_PROVIDER", "nominatim"
+        ).lower()
 
         return cls(
             token=token,
@@ -92,21 +107,73 @@ class BotConfig:
             backup_enabled=backup_enabled,
             backup_retention_days=backup_retention_days,
             backup_time_hour=backup_time_hour,
+            weather_api_daily_limit=weather_api_daily_limit,
+            weather_api_quota_path=weather_api_quota_path,
+            weather_service_provider=weather_service_provider,
+            geocode_service_provider=geocode_service_provider,
         )
 
 
-_config: BotConfig = None
+class ConfigProvider(ABC):
+
+    @abstractmethod
+    def get(self) -> BotConfig:
+
+        raise NotImplementedError
+
+
+class EnvConfigProvider(ConfigProvider):
+
+    def __init__(self) -> None:
+
+        self._config: Optional[BotConfig] = None
+
+    def get(self) -> BotConfig:
+
+        if self._config is None:
+            self._config = BotConfig.from_env()
+        return self._config
+
+    def reset(self) -> None:
+
+        self._config = None
+
+
+class StaticConfigProvider(ConfigProvider):
+
+    def __init__(self, config: BotConfig) -> None:
+
+        self._config = config
+
+    def get(self) -> BotConfig:
+
+        return self._config
+
+
+_config_provider: ConfigProvider = EnvConfigProvider()
+
+
+def get_config_provider() -> ConfigProvider:
+
+    return _config_provider
+
+
+def set_config_provider(provider: ConfigProvider) -> None:
+
+    global _config_provider
+    _config_provider = provider
+
+
+def reset_config_provider() -> None:
+
+    set_config_provider(EnvConfigProvider())
 
 
 def get_config() -> BotConfig:
 
-    global _config
-    if _config is None:
-        _config = BotConfig.from_env()
-    return _config
+    return _config_provider.get()
 
 
 def set_config(config_instance: BotConfig) -> None:
 
-    global _config
-    _config = config_instance
+    set_config_provider(StaticConfigProvider(config_instance))

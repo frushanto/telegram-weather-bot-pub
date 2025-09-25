@@ -10,6 +10,7 @@ __pycache__/
 
 # Data files (may contain sensitive user data)
 data/storage.json
+data/weather_api_quota.json
 data/backups/
 
 # Logs

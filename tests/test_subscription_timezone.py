@@ -4,6 +4,7 @@ import pytest
 
 from weatherbot.application.subscription_service import SubscriptionService
 from weatherbot.core.exceptions import ValidationError
+from weatherbot.domain.value_objects import SubscriptionEntry
 
 
 class TestSubscriptionServiceTimezone:
@@ -128,12 +129,52 @@ class TestSubscriptionServiceTimezone:
 
         assert len(subscriptions) == 2
 
-        moscow_sub = next(sub for sub in subscriptions if sub["chat_id"] == "123")
-        assert moscow_sub["hour"] == 8
-        assert moscow_sub["minute"] == 30
-        assert moscow_sub["user_data"]["timezone"] == "Europe/Moscow"
+        assert all(isinstance(sub, SubscriptionEntry) for sub in subscriptions)
 
-        ny_sub = next(sub for sub in subscriptions if sub["chat_id"] == "456")
-        assert ny_sub["hour"] == 9
-        assert ny_sub["minute"] == 0
-        assert ny_sub["user_data"]["timezone"] == "America/New_York"
+        moscow_sub = next(sub for sub in subscriptions if sub.chat_id == "123")
+        assert moscow_sub.subscription.hour == 8
+        assert moscow_sub.subscription.minute == 30
+        assert moscow_sub.home and moscow_sub.home.timezone == "Europe/Moscow"
+
+        ny_sub = next(sub for sub in subscriptions if sub.chat_id == "456")
+        assert ny_sub.subscription.hour == 9
+        assert ny_sub.subscription.minute == 0
+        assert ny_sub.home and ny_sub.home.timezone == "America/New_York"
+
+    @pytest.mark.asyncio
+    async def test_get_all_subscriptions_handles_legacy_string_values(
+        self, subscription_service, mock_user_repo
+    ):
+        """Legacy storage can store hours/minutes as strings; ensure we coerce them."""
+        mock_user_repo.get_all_users.return_value = {
+            "789": {
+                "lat": 48.8566,
+                "lon": 2.3522,
+                "label": "Paris",
+                "timezone": "Europe/Paris",
+                "sub_hour": "6",
+                "sub_min": "45",
+            }
+        }
+
+        subscriptions = await subscription_service.get_all_subscriptions()
+
+        assert len(subscriptions) == 1
+        entry = subscriptions[0]
+        assert entry.subscription.hour == 6
+        assert entry.subscription.minute == 45
+        assert entry.home and entry.home.label == "Paris"
+
+    def test_user_subscription_from_storage_invalid_values(self):
+        """Invalid hour/minute should yield None or fall back to defaults."""
+        from weatherbot.domain.value_objects import UserSubscription
+
+        assert UserSubscription.from_storage({"sub_hour": None}) is None
+        assert UserSubscription.from_storage({"sub_hour": "not"}) is None
+
+        subscription = UserSubscription.from_storage(
+            {"sub_hour": "9", "sub_min": "invalid"}
+        )
+        assert subscription is not None
+        assert subscription.hour == 9
+        assert subscription.minute == 0

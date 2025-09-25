@@ -66,9 +66,11 @@ class User:
 
 **Application Business Rules** - Contains application-specific business rules.
 
+- **Value Objects**: Rich immutable data structures (`UserProfile`, `UserHome`, `ConversationState`)
 - **Interfaces/Ports**: Abstract definitions for external services
 - **Domain Services**: Complex business operations
 - **Repository Interfaces**: Data access abstractions
+- **Conversation Management**: State machine for multi-step user interactions
 
 ```python
 # Example: Repository interface
@@ -123,9 +125,10 @@ class GetWeatherUseCase:
 
 **Controllers** - Handle external requests and coordinate responses.
 
-- **Command Handlers**: Process Telegram commands
-- **Message Handlers**: Process text messages and locations
-- **Callback Handlers**: Handle button interactions
+- **Command Handlers**: Process Telegram commands with value object interactions
+- **Message Handlers**: Process text messages and locations using conversation state management
+- **Admin Handlers**: Manage system operations with structured admin value objects
+- **Conversation State**: Immutable state machine using `ConversationStateManager` instead of global dicts
 
 ## Component Diagram
 
@@ -248,6 +251,12 @@ weatherbot/
 │   └── weather_service.py
 ├── infrastructure/         # Framework & Drivers
 │   ├── __init__.py
+│   ├── container/           # Modular DI registrations
+│   │   ├── __init__.py
+│   │   ├── config.py        # Config provider registration
+│   │   ├── repositories.py  # Storage bindings
+│   │   ├── external_clients.py  # HTTP clients & adapters
+│   │   └── services.py      # Application service factories
 │   ├── external_services.py   # API clients
 │   ├── json_repository.py     # JSON storage implementation
 │   ├── setup.py              # Infrastructure setup
@@ -285,16 +294,29 @@ the actual registration performed by the project:
 ```python
 # infrastructure/setup.py (representative)
 def setup_container() -> None:
-    config = get_config()
-    container.register_singleton(UserRepository, JsonUserRepository(config.storage_path))
-    container.register_singleton(WeatherService, OpenMeteoWeatherService())
-    container.register_singleton(GeocodeService, NominatimGeocodeService())
-    container.register_singleton(SpamProtectionService, LegacySpamProtectionService())
+    config_provider = register_config_provider()
+    config = config_provider.get()
+    register_repositories(config)
+    register_external_clients(config)
+    register_application_services(config_provider)
 
-    container.register_factory(UserService, lambda: UserService(container.get(UserRepository)))
-    container.register_factory(WeatherApplicationService, lambda: WeatherApplicationService(container.get(WeatherService), container.get(GeocodeService)))
-    container.register_factory(SubscriptionService, lambda: SubscriptionService(container.get(UserRepository)))
+# Optionally override specific bindings (e.g., swap HTTP client):
+    # register_external_clients(
+    #     config,
+    #     overrides=override_weather_service(lambda: CustomWeatherService()),
+    # )
 ```
+
+`register_external_clients` looks at `config.weather_service_provider` and
+`config.geocode_service_provider` (S config) to select the concrete HTTP clients.
+Current keys are `open-meteo` and `nominatim`, but new providers can be added by
+extending the factory dictionaries in `infrastructure/external_services.py` or by
+injecting overrides.
+
+Each registration helper accepts optional overrides so integration points can be
+swapped without re-implementing the entire setup. Provide a mapping of
+interfaces to concrete instances (or factories for service factories) and the
+container will register those instead of the defaults.
 
 ### 2. Repository Pattern
 
@@ -327,6 +349,41 @@ class WeatherFormatter:
         # Formatting logic
         pass
 ```
+
+### 5. Value Object Pattern
+
+The architecture emphasizes immutable value objects throughout all layers:
+
+```python
+# Domain value objects
+@dataclass
+class UserProfile:
+    language: str = "ru"
+    language_explicit: bool = False
+    home: Optional[UserHome] = None
+    subscription: Optional[UserSubscription] = None
+
+@dataclass  
+class ConversationState:
+    mode: ConversationMode = ConversationMode.IDLE
+    last_location: Optional[LocationContext] = None
+    
+    def set_awaiting(self, mode: ConversationMode) -> ConversationState:
+        return ConversationState(mode=mode, last_location=self.last_location)
+
+# Admin service value objects
+@dataclass
+class AdminStatsResult:
+    user_count: int
+    blocked_count: int 
+    top_users: List[AdminTopUser]
+```
+
+**Benefits:**
+- **Type Safety**: Strong typing prevents runtime errors
+- **Immutability**: State changes return new objects instead of mutations
+- **Consistency**: All layers speak in structured objects, not raw dicts/tuples
+- **Testability**: Easy to create test fixtures and verify state changes
 
 ### 5. Decorator Pattern
 
@@ -419,21 +476,23 @@ class SpamProtection:
 ### 1. Unit Tests
 
 - Test individual components in isolation
-- Mock external dependencies
-- Focus on business logic
+- Mock external dependencies  
+- Focus on business logic with value objects
 
 ```python
 @pytest.mark.asyncio
-async def test_get_weather_success():
+async def test_conversation_state_transitions():
     # Arrange
-    weather_service = Mock()
-    use_case = GetWeatherUseCase(weather_service)
+    manager = ConversationStateManager()
+    chat_id = 123
     
     # Act
-    result = await use_case.execute("London")
+    manager.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
+    state = manager.get_state(chat_id)
     
     # Assert
-    assert result.temperature > 0
+    assert state.is_awaiting(ConversationMode.AWAITING_SETHOME)
+    assert state.mode == ConversationMode.AWAITING_SETHOME
 ```
 
 ### 2. Integration Tests

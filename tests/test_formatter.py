@@ -66,12 +66,12 @@ def test_format_weather_missing_fields():
     }
     result = formatter.format_weather(data, place_label="Test")
     assert "Test" in result
-    assert "Температура: <b>None°C</b>" in result
+    assert "Температура: <b>—°C</b>" in result
     assert "ощущается как" not in result
-    assert "Ветер: <b>None м/с</b>" in result
-    assert "Макс: <b>None°C</b>" in result
-    assert "Мин: <b>None°C</b>" in result
-    assert "Вероятность осадков (макс): <b>None%</b>" in result
+    assert "Ветер: <b>— м/с</b>" in result
+    assert "Макс: <b>—°C</b>" in result
+    assert "Мин: <b>—°C</b>" in result
+    assert "Вероятность осадков (макс): <b>—%</b>" in result
     assert "Восход: —" in result
     assert "Закат: —" in result
 
@@ -95,7 +95,7 @@ def test_format_weather_partial_daily():
     assert "(ощущается как <b>3°C</b>)" in result
     assert "<b>1 м/с</b>" in result
     assert "Макс: <b>8°C</b>" in result
-    assert "Мин: <b>None°C</b>" in result
+    assert "Мин: <b>—°C</b>" in result
     assert "Вероятность осадков (макс): <b>0%</b>" in result
     assert "Восход: —" in result
     assert "Закат: —" in result
@@ -301,7 +301,8 @@ def test_format_weather_with_day_after_tomorrow():
     assert "Вероятность осадков (макс): <b>0%</b>" in result
 
     assert "На завтра (Преимущественно ясно):" in result
-    assert "<b>12.3°C</b> ... <b>25.0°C</b>" in result
+    assert "🌡 <b>12.3°C</b>" in result
+    assert "<b>25°C</b>" in result
     assert "☔ <b>20%</b>" in result
     assert "💨 <b>4.1 м/с</b>" in result
 

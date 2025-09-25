@@ -7,6 +7,8 @@ import pytest
 from weatherbot.application.subscription_service import SubscriptionService
 from weatherbot.application.user_service import UserService
 from weatherbot.application.weather_service import WeatherApplicationService
+from weatherbot.domain.value_objects import UserHome, UserProfile, UserSubscription
+from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
 from weatherbot.handlers.commands import (
     data_cmd,
     delete_me_cmd,
@@ -24,6 +26,16 @@ from weatherbot.handlers.commands import (
 from weatherbot.infrastructure.json_repository import JsonUserRepository
 
 
+@pytest.fixture(autouse=True)
+def patch_commands_quota_notifier(monkeypatch):
+
+    mock_notifier = AsyncMock()
+    monkeypatch.setattr(
+        "weatherbot.handlers.commands.notify_quota_if_needed", mock_notifier
+    )
+    return mock_notifier
+
+
 @pytest.mark.asyncio
 async def test_start_cmd():
 
@@ -34,12 +46,45 @@ async def test_start_cmd():
 
     mock_user_service = AsyncMock()
     mock_user_service.get_user_language.return_value = "ru"
+    mock_user_service.get_user_profile.return_value = UserProfile()
     with patch(
         "weatherbot.handlers.commands.get_user_service", return_value=mock_user_service
     ):
         with patch("weatherbot.handlers.commands.i18n.get", return_value="Привет!"):
+            with patch(
+                "weatherbot.handlers.commands.language_keyboard", return_value=None
+            ):
+                with patch(
+                    "weatherbot.handlers.commands.main_keyboard", return_value=None
+                ):
+                    await start_cmd(update, context)
+
+    mock_user_service.get_user_language.assert_awaited_once_with("123456")
+    update.message.reply_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_start_cmd_language_set():
+
+    update = MagicMock()
+    update.effective_chat.id = 123456
+    update.message.reply_text = AsyncMock()
+    context = MagicMock()
+
+    mock_user_service = AsyncMock()
+    mock_user_service.get_user_language.return_value = "en"
+    mock_user_service.get_user_profile.return_value = UserProfile(
+        language="en", language_explicit=True
+    )
+    with patch(
+        "weatherbot.handlers.commands.get_user_service", return_value=mock_user_service
+    ):
+        with patch("weatherbot.handlers.commands.i18n.get", return_value="Hello"):
             with patch("weatherbot.handlers.commands.main_keyboard", return_value=None):
-                await start_cmd(update, context)
+                with patch(
+                    "weatherbot.handlers.commands.language_keyboard", return_value=None
+                ):
+                    await start_cmd(update, context)
 
     mock_user_service.get_user_language.assert_awaited_once_with("123456")
     update.message.reply_text.assert_awaited_once()
@@ -116,16 +161,11 @@ async def test_home_cmd_with_home():
 
     mock_user_service = AsyncMock()
     mock_user_service.get_user_language.return_value = "ru"
-    mock_user_service.get_user_home.return_value = {
-        "lat": 55.7558,
-        "lon": 37.6176,
-        "label": "Москва",
-    }
+    mock_user_service.get_user_home.return_value = UserHome(
+        lat=55.7558, lon=37.6176, label="Москва"
+    )
     mock_weather_service = AsyncMock()
-    mock_weather_service.get_weather_by_coordinates.return_value = {
-        "current": {"temperature_2m": 20, "weather_code": 0},
-        "daily": {},
-    }
+    mock_weather_service.get_weather_by_coordinates.return_value = _sample_report()
     with patch(
         "weatherbot.handlers.commands.get_user_service", return_value=mock_user_service
     ):
@@ -280,14 +320,13 @@ async def test_data_cmd():
     context = MagicMock()
     mock_user_service = AsyncMock()
     mock_user_service.get_user_language.return_value = "ru"
-    mock_user_service.get_user_data.return_value = {
-        "lat": 55.7558,
-        "lon": 37.6176,
-        "label": "Москва",
-        "sub_hour": 8,
-        "sub_min": 30,
-        "language": "ru",
-    }
+    mock_user_service.get_user_profile.return_value = UserProfile(
+        language="ru",
+        home=UserHome(
+            lat=55.7558, lon=37.6176, label="Москва", timezone="Europe/Moscow"
+        ),
+        subscription=UserSubscription(hour=8, minute=30),
+    )
     with patch(
         "weatherbot.handlers.commands.get_user_service", return_value=mock_user_service
     ):
@@ -296,7 +335,7 @@ async def test_data_cmd():
             with patch("weatherbot.handlers.commands.main_keyboard", return_value=None):
                 await data_cmd(update, context)
 
-    mock_user_service.get_user_data.assert_awaited_once_with("123456")
+    mock_user_service.get_user_profile.assert_awaited_once_with("123456")
     update.message.reply_text.assert_awaited_once()
 
 
@@ -366,3 +405,25 @@ async def test_privacy_cmd():
                 await privacy_cmd(update, context)
 
     update.message.reply_text.assert_awaited_once()
+
+
+def _sample_report(temp: float = 20.0) -> WeatherReport:
+    return WeatherReport(
+        current=WeatherCurrent(
+            temperature=temp,
+            apparent_temperature=temp - 2,
+            wind_speed=5.0,
+            weather_code=0,
+        ),
+        daily=[
+            WeatherDaily(
+                min_temperature=temp - 5,
+                max_temperature=temp + 5,
+                precipitation_probability=30.0,
+                sunrise="2025-01-01T06:00",
+                sunset="2025-01-01T18:00",
+                wind_speed_max=7.0,
+                weather_code=1,
+            )
+        ],
+    )

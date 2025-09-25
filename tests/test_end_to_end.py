@@ -2,6 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from weatherbot.domain.value_objects import UserHome, UserProfile
+from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
 from weatherbot.handlers.commands import (
     data_cmd,
     delete_me_cmd,
@@ -139,8 +141,9 @@ class TestAllCommandsAllLanguages:
             ):
                 user_service = AsyncMock()
                 user_service.get_user_language.return_value = lang
-                user_service.get_user_home.return_value = {"lat": 50.0, "lon": 10.0}
-                user_service.get_user_data.return_value = {"label": f"Home in {lang}"}
+                user_service.get_user_home.return_value = UserHome(
+                    lat=50.0, lon=10.0, label=f"Home in {lang}"
+                )
                 mock_user_service.return_value = user_service
                 weather_service = AsyncMock()
                 weather_service.get_weather_by_coordinates = AsyncMock(
@@ -267,10 +270,25 @@ class TestAllCommandsAllLanguages:
                 user_service.get_user_language.return_value = lang
                 mock_user_service.return_value = user_service
                 weather_service = AsyncMock()
-                weather_service.get_weather_by_coordinates.return_value = {
-                    "temperature": 15,
-                    "description": f"weather in {lang}",
-                }
+                weather_service.get_weather_by_coordinates.return_value = WeatherReport(
+                    current=WeatherCurrent(
+                        temperature=15.0,
+                        apparent_temperature=14.0,
+                        wind_speed=3.0,
+                        weather_code=0,
+                    ),
+                    daily=[
+                        WeatherDaily(
+                            min_temperature=10.0,
+                            max_temperature=20.0,
+                            precipitation_probability=5.0,
+                            sunrise="2025-01-01T07:00",
+                            sunset="2025-01-01T19:00",
+                            wind_speed_max=4.0,
+                            weather_code=1,
+                        )
+                    ],
+                )
                 mock_weather_service.return_value = weather_service
                 mock_format.return_value = f"Weather format in {lang}"
                 await on_location(update, context)
@@ -290,12 +308,16 @@ class TestAllCommandsAllLanguages:
             update.callback_query.answer = AsyncMock()
             update.callback_query.message.edit_text = AsyncMock()
             context = MagicMock()
+            context.bot = AsyncMock()
             with (
                 patch("weatherbot.handlers.language.get_user_service") as mock_service,
                 patch("weatherbot.handlers.language.i18n.get") as mock_i18n,
             ):
                 user_service = AsyncMock()
                 mock_service.return_value = user_service
+                user_service.get_user_profile.return_value = UserProfile(
+                    language="ru", language_explicit=True
+                )
                 mock_i18n.return_value = f"Language changed to {target_lang}"
                 await language_callback(update, context)
                 user_service.set_user_language.assert_awaited_with(

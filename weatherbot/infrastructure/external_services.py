@@ -1,16 +1,31 @@
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 import httpx
 
-from ..core.exceptions import GeocodeServiceError, WeatherServiceError
+from ..core.exceptions import (
+    ConfigurationError,
+    GeocodeServiceError,
+    WeatherQuotaExceededError,
+    WeatherServiceError,
+)
 from ..domain.services import GeocodeService, WeatherService
+from ..domain.weather import WeatherReport
+from .weather_quota import WeatherApiQuotaManager
 
 
 class OpenMeteoWeatherService(WeatherService):
 
-    async def get_weather(self, lat: float, lon: float) -> Dict:
+    def __init__(self, quota_manager: WeatherApiQuotaManager) -> None:
+
+        self._quota_manager = quota_manager
+
+    async def get_weather(self, lat: float, lon: float) -> WeatherReport:
 
         try:
+            reset_at = await self._quota_manager.try_consume()
+            if reset_at is not None:
+                raise WeatherQuotaExceededError(reset_at)
+
             url = "https://api.open-meteo.com/v1/forecast"
             params = {
                 "latitude": lat,
@@ -23,7 +38,10 @@ class OpenMeteoWeatherService(WeatherService):
             async with httpx.AsyncClient(timeout=10) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
-                return response.json()
+                payload = response.json()
+                return WeatherReport.from_open_meteo(payload)
+        except WeatherQuotaExceededError:
+            raise
         except Exception as e:
             raise WeatherServiceError(f"Weather fetch error: {e}")
 
@@ -49,3 +67,34 @@ class NominatimGeocodeService(GeocodeService):
                 return lat, lon, display_name
         except Exception as e:
             raise GeocodeServiceError(f"Geocoding error: {e}")
+
+
+WeatherServiceFactory = Callable[[WeatherApiQuotaManager], WeatherService]
+GeocodeServiceFactory = Callable[[], GeocodeService]
+
+
+WEATHER_SERVICE_FACTORIES: Dict[str, WeatherServiceFactory] = {
+    "open-meteo": lambda quota: OpenMeteoWeatherService(quota)
+}
+
+GEOCODE_SERVICE_FACTORIES: Dict[str, GeocodeServiceFactory] = {
+    "nominatim": NominatimGeocodeService,
+}
+
+
+def create_weather_service(
+    provider: str, quota_manager: WeatherApiQuotaManager
+) -> WeatherService:
+
+    factory = WEATHER_SERVICE_FACTORIES.get(provider)
+    if not factory:
+        raise ConfigurationError(f"Unsupported weather service provider '{provider}'.")
+    return factory(quota_manager)
+
+
+def create_geocode_service(provider: str) -> GeocodeService:
+
+    factory = GEOCODE_SERVICE_FACTORIES.get(provider)
+    if not factory:
+        raise ConfigurationError(f"Unsupported geocode service provider '{provider}'.")
+    return factory()

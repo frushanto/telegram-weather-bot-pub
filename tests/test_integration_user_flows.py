@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from telegram.ext import ContextTypes
 
+from weatherbot.domain.value_objects import UserHome
+from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
 from weatherbot.handlers.commands import (
     home_cmd,
     sethome_cmd,
@@ -31,20 +33,40 @@ async def test_sethome_home_unsethome_flow():
         patch(
             "weatherbot.handlers.commands.format_weather", return_value="WEATHER_MSG"
         ),
+        patch(
+            "weatherbot.handlers.commands.notify_quota_if_needed",
+            new_callable=AsyncMock,
+        ),
     ):
         user_service = AsyncMock()
         user_service.get_user_language.return_value = "ru"
         user_service.set_user_home = AsyncMock()
-        user_service.get_user_home.return_value = {
-            "lat": 10,
-            "lon": 20,
-            "label": "TestCity",
-        }
+        user_service.get_user_home.return_value = UserHome(
+            lat=10, lon=20, label="TestCity"
+        )
         mock_user_svc.return_value = user_service
 
         weather_service = AsyncMock()
         weather_service.geocode_city.return_value = (10, 20, "TestCity")
-        weather_service.get_weather_by_coordinates.return_value = {}
+        weather_service.get_weather_by_coordinates.return_value = WeatherReport(
+            current=WeatherCurrent(
+                temperature=15.0,
+                apparent_temperature=14.0,
+                wind_speed=3.0,
+                weather_code=0,
+            ),
+            daily=[
+                WeatherDaily(
+                    min_temperature=10.0,
+                    max_temperature=20.0,
+                    precipitation_probability=5.0,
+                    sunrise="2025-01-01T07:00",
+                    sunset="2025-01-01T19:00",
+                    wind_speed_max=4.0,
+                    weather_code=1,
+                )
+            ],
+        )
         mock_weather_svc.return_value = weather_service
 
         await sethome_cmd.__wrapped__(update, context)

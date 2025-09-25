@@ -6,6 +6,7 @@ import pytest
 
 from weatherbot.application.subscription_service import SubscriptionService
 from weatherbot.application.user_service import UserService
+from weatherbot.domain.value_objects import UserSubscription
 from weatherbot.infrastructure.json_repository import JsonUserRepository
 
 
@@ -59,7 +60,9 @@ class TestSimpleIntegration:
 
         await subscription_service.set_subscription(user_id, 8, 30)
         sub = await subscription_service.get_subscription(user_id)
-        assert sub == (8, 30)
+        assert isinstance(sub, UserSubscription)
+        assert sub.hour == 8
+        assert sub.minute == 30
 
         await subscription_service.remove_subscription(user_id)
         sub = await subscription_service.get_subscription(user_id)

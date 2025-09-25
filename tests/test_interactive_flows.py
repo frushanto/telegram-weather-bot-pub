@@ -30,9 +30,12 @@ async def test_sethome_interactive_prompt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sethome_interactive_flow(monkeypatch):
+    from weatherbot.domain.conversation import ConversationMode
+    from weatherbot.infrastructure.state import conversation_manager
 
     chat_id = 42
     awaiting_sethome[chat_id] = True
+    conversation_manager.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
 
     user_service = MagicMock()
     user_service.get_user_language = AsyncMock(return_value="ru")
@@ -58,6 +61,9 @@ async def test_sethome_interactive_flow(monkeypatch):
     await on_text(update, context)
 
     assert chat_id not in awaiting_sethome
+    assert not conversation_manager.is_awaiting(
+        chat_id, ConversationMode.AWAITING_SETHOME
+    )
     update.message.reply_text.assert_awaited()
 
     args, _ = update.message.reply_text.call_args
@@ -86,9 +92,14 @@ async def test_subscribe_interactive_prompt(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_subscribe_interactive_flow(monkeypatch):
+    from weatherbot.domain.conversation import ConversationMode
+    from weatherbot.infrastructure.state import conversation_manager
 
     chat_id = 99
     awaiting_subscribe_time[chat_id] = True
+    conversation_manager.set_awaiting_mode(
+        chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
+    )
 
     sub_service = MagicMock()
     sub_service.parse_time_string = AsyncMock(return_value=(7, 30))
@@ -127,6 +138,9 @@ async def test_subscribe_interactive_flow(monkeypatch):
     await on_text(update, context)
 
     assert chat_id not in awaiting_subscribe_time
+    assert not conversation_manager.is_awaiting(
+        chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
+    )
     update.message.reply_text.assert_awaited()
     args, _ = update.message.reply_text.call_args
     assert "MSG_subscribe_success" in args[0]
@@ -134,9 +148,13 @@ async def test_subscribe_interactive_flow(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cancel_clears_states(monkeypatch):
+    from weatherbot.domain.conversation import ConversationMode
+    from weatherbot.infrastructure.state import conversation_manager
+
     chat_id = 123
     awaiting_sethome[chat_id] = True
     awaiting_subscribe_time[chat_id] = True
+    conversation_manager.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
 
     update = MagicMock()
     update.effective_chat.id = chat_id
@@ -150,6 +168,9 @@ async def test_cancel_clears_states(monkeypatch):
 
     assert chat_id not in awaiting_sethome
     assert chat_id not in awaiting_subscribe_time
+    assert not conversation_manager.is_awaiting(
+        chat_id, ConversationMode.AWAITING_SETHOME
+    )
     update.message.reply_text.assert_awaited_with(
         "MSG_operation_cancelled", reply_markup=ANY
     )

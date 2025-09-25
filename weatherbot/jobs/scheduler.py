@@ -8,14 +8,17 @@ from weatherbot.core.config import get_config
 from weatherbot.core.exceptions import (
     StorageError,
     ValidationError,
+    WeatherQuotaExceededError,
     WeatherServiceError,
 )
+from weatherbot.infrastructure.quota_notifications import notify_quota_if_needed
 from weatherbot.infrastructure.setup import (
     get_user_service,
     get_weather_application_service,
 )
 from weatherbot.presentation.formatter import format_weather
 from weatherbot.presentation.i18n import i18n
+from weatherbot.utils.time import format_reset_time
 
 logger = logging.getLogger(__name__)
 
@@ -35,13 +38,12 @@ async def schedule_daily_timezone_aware(
     try:
         # Get user's timezone
         user_service = get_user_service()
-        user_data = await user_service.get_user_data(str(chat_id))
+        home = await user_service.get_user_home(str(chat_id))
 
-        if user_data and "timezone" in user_data:
-            # Use user's timezone
-            user_timezone = pytz.timezone(user_data["timezone"])
+        if home and home.timezone:
+            user_timezone = pytz.timezone(home.timezone)
             logger.info(
-                f"Scheduling subscription for user {chat_id} using timezone {user_data['timezone']}"
+                f"Scheduling subscription for user {chat_id} using timezone {home.timezone}"
             )
         else:
             # Fallback to system timezone
@@ -101,12 +103,13 @@ def schedule_daily(job_queue, chat_id: int, hour: int, minute: int = 0):
 async def send_home_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
 
     chat_id = context.job.chat_id
+    home = None
     try:
         user_service = get_user_service()
         weather_service = get_weather_application_service()
 
-        user_data = await user_service.get_user_data(str(chat_id))
-        if not user_data or "lat" not in user_data or "lon" not in user_data:
+        home = await user_service.get_user_home(str(chat_id))
+        if not home:
             user_lang = await user_service.get_user_language(str(chat_id)) or "ru"
             await context.bot.send_message(chat_id, i18n.get("home_not_set", user_lang))
             return
@@ -114,14 +117,21 @@ async def send_home_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
         user_lang = await user_service.get_user_language(str(chat_id)) or "ru"
 
         weather_data = await weather_service.get_weather_by_coordinates(
-            user_data["lat"], user_data["lon"]
+            home.lat, home.lon
         )
 
-        msg = format_weather(
-            weather_data, place_label=user_data.get("label"), lang=user_lang
-        )
+        msg = format_weather(weather_data, place_label=home.label, lang=user_lang)
         await context.bot.send_message(chat_id, msg, parse_mode="HTML")
         logger.debug(f"Sent home weather to user {chat_id}")
+        await notify_quota_if_needed(context.bot)
+    except WeatherQuotaExceededError as e:
+        tz_name = home.timezone if home else None
+        reset_text = format_reset_time(e.reset_at, tz_name)
+        await context.bot.send_message(
+            chat_id,
+            i18n.get("weather_quota_exceeded", user_lang, reset_time=reset_text),
+        )
+        await notify_quota_if_needed(context.bot)
     except (ValidationError, StorageError, WeatherServiceError) as e:
         logger.error(f"Error sending home weather to user {chat_id}: {e}")
         user_lang = await user_service.get_user_language(str(chat_id)) or "ru"

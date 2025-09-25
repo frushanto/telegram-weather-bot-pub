@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from weatherbot.domain.value_objects import UserProfile
 from weatherbot.handlers.language import language_callback
 
 
@@ -14,12 +15,16 @@ async def test_language_callback_success():
     update.callback_query.answer = AsyncMock()
     update.callback_query.message.edit_text = AsyncMock()
     context = MagicMock()
+    context.bot = AsyncMock()
     with (
         patch("weatherbot.handlers.language.get_user_service") as mock_user_service,
         patch("weatherbot.handlers.language.i18n.get") as mock_i18n,
     ):
         user_service = AsyncMock()
         user_service.set_user_language = AsyncMock()
+        user_service.get_user_profile.return_value = UserProfile(
+            language="en", language_explicit=True
+        )
         mock_user_service.return_value = user_service
         mock_i18n.return_value = "Language changed to English"
         await language_callback(update, context)
@@ -40,12 +45,16 @@ async def test_language_callback_all_languages():
         update.callback_query.answer = AsyncMock()
         update.callback_query.message.edit_text = AsyncMock()
         context = MagicMock()
+        context.bot = AsyncMock()
         with (
             patch("weatherbot.handlers.language.get_user_service") as mock_user_service,
             patch("weatherbot.handlers.language.i18n.get") as mock_i18n,
         ):
             user_service = AsyncMock()
             user_service.set_user_language = AsyncMock()
+            user_service.get_user_profile.return_value = UserProfile(
+                language=lang, language_explicit=True
+            )
             mock_user_service.return_value = user_service
             mock_i18n.return_value = f"Language changed to {lang}"
             await language_callback(update, context)
@@ -85,11 +94,13 @@ async def test_language_callback_service_error():
     update.callback_query.answer = AsyncMock()
     update.callback_query.message.edit_text = AsyncMock()
     context = MagicMock()
+    context.bot = AsyncMock()
     with (
         patch("weatherbot.handlers.language.get_user_service") as mock_user_service,
         patch("weatherbot.handlers.language.i18n.get") as mock_i18n,
     ):
         user_service = AsyncMock()
+        user_service.get_user_profile.return_value = UserProfile()
         user_service.set_user_language.side_effect = Exception("Database error")
         mock_user_service.return_value = user_service
         mock_i18n.return_value = "❌ Ошибка при смене языка"

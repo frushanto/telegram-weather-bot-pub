@@ -36,6 +36,17 @@ This document lists all environment variables and configuration aspects of the T
 
 Backups are written to `data/backups/` as `storage-YYYYmmdd-HHMMSS.json` and older files are pruned according to retention.
 
+## Weather API Quota
+
+| Variable                   | Default                     | Description                                                                                  |
+| -------------------------- | --------------------------- | -------------------------------------------------------------------------------------------- |
+| `WEATHER_API_DAILY_LIMIT`  | 1000                        | Maximum number of weather API calls allowed in any rolling 24-hour window.                   |
+| `WEATHER_API_QUOTA_PATH`   | `data/weather_api_quota.json` | Path to JSON file used to persist timestamps for quota tracking across restarts.             |
+| `WEATHER_SERVICE_PROVIDER` | `open-meteo`                | Identifier of the weather provider implementation (e.g. `open-meteo`).                      |
+| `GEOCODE_SERVICE_PROVIDER` | `nominatim`                 | Identifier of the geocoding provider implementation (e.g. `nominatim`).                     |
+
+An example of the expected file format is available at `data/weather_api_quota_example.json`.
+
 
 ## File Layout
 
@@ -49,6 +60,7 @@ Backups are written to `data/backups/` as `storage-YYYYmmdd-HHMMSS.json` and old
 - Environment variables are loaded via `python-dotenv` (`load_dotenv()` in `core/config.py`).
 - Missing `BOT_TOKEN` logs a warning and allows test usage.
 - Invalid `ADMIN_IDS` format raises `ConfigurationError`.
+- Runtime configuration is resolved through a `ConfigProvider`. Override it by calling `set_config()` in tests or scripts and always clean up with `reset_config_provider()`.
 
 ## Adding New Config
 1. Add a field to `SpamConfig` or `BotConfig` dataclasses.
@@ -94,6 +106,12 @@ ADMIN_IDS=123456789,987654321
 ADMIN_LANGUAGE=ru
 TIMEZONE=Europe/Berlin
 STORAGE_PATH=data/storage.json
+
+# Weather API quota
+WEATHER_API_DAILY_LIMIT=1000
+WEATHER_API_QUOTA_PATH=data/weather_api_quota.json
+WEATHER_SERVICE_PROVIDER=open-meteo
+GEOCODE_SERVICE_PROVIDER=nominatim
 
 # Backup
 BACKUP_ENABLED=true

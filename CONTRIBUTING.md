@@ -93,19 +93,22 @@ Types:
 
 ## 🏗 Architecture Guidelines
 
-This project follows Clean Architecture principles:
+This project follows Clean Architecture principles with comprehensive value object patterns:
 
-- **Domain Layer**: Business entities and interfaces
-- **Application Layer**: Use cases and business logic
+- **Domain Layer**: Value objects (`UserProfile`, `ConversationState`) and interfaces
+- **Application Layer**: Use cases and business logic with structured return types
 - **Infrastructure Layer**: External service implementations
-- **Presentation Layer**: UI, formatting, internationalization
-- **Handlers Layer**: Telegram bot message and command handlers
+- **Presentation Layer**: UI, formatting, internationalization  
+- **Handlers Layer**: Telegram bot handlers using conversation state management
 
 ### Key Principles:
-1. **Dependency Inversion**: High-level modules should not depend on low-level modules
-2. **Single Responsibility**: Each class/function should have one reason to change
-3. **Testability**: All business logic should be unit testable
-4. **Internationalization**: All user-facing text should use the i18n system
+1. **Value Object Architecture**: Use immutable data structures throughout all layers
+2. **Type Safety**: Prefer structured objects over raw dicts/tuples/primitives
+3. **Dependency Inversion**: High-level modules should not depend on low-level modules
+4. **Single Responsibility**: Each class/function should have one reason to change
+5. **Testability**: All business logic should be unit testable
+6. **Immutability**: State changes return new objects instead of mutations
+7. **Internationalization**: All user-facing text should use the i18n system
 
 ## 🧪 Testing Guidelines
 
@@ -131,6 +134,83 @@ pytest tests/test_specific_file.py
 # With coverage
 pytest --cov=weatherbot tests/
 ```
+
+### Overriding Configuration in Tests
+- Use the helper functions from `weatherbot.core.config` instead of patching module globals.
+- Typical pattern:
+  ```python
+  from weatherbot.core.config import BotConfig, set_config, reset_config_provider
+
+  cfg = BotConfig(token="test", admin_ids=[1])
+  set_config(cfg)
+  try:
+      # test logic here
+      ...
+  finally:
+      reset_config_provider()
+  ```
+- Prefer this approach in fixtures to guarantee the provider is reset even if a test fails.
+
+### Dependency Overrides in Tests
+- When you need to swap infrastructure dependencies, prefer the `overrides=` parameters now available on the helper functions in `weatherbot.infrastructure.container` instead of `monkeypatch`.
+- Example: override the weather provider in a test while reusing the shared setup logic:
+  ```python
+  from weatherbot.infrastructure.container import (
+      register_external_clients,
+      override_weather_service,
+  )
+
+  register_external_clients(
+      config,
+      overrides=override_weather_service(lambda: FakeWeatherService()),
+  )
+  ```
+- This keeps tests declarative and avoids leaking patched globals across test cases.
+
+## 💎 Value Object Development Guidelines
+
+When working with the codebase, follow these patterns:
+
+### Creating New Value Objects
+```python
+@dataclass
+class NewValueObject:
+    field1: str
+    field2: int
+    optional_field: Optional[str] = None
+    
+    def to_storage(self) -> Dict[str, Any]:
+        # Serialization logic
+        pass
+    
+    @classmethod  
+    def from_storage(cls, data: Dict[str, Any]) -> "NewValueObject":
+        # Deserialization logic
+        pass
+```
+
+### Handler Patterns
+- **DO**: Use conversation manager for state tracking
+  ```python
+  conversation_manager.set_awaiting_mode(chat_id, ConversationMode.AWAITING_CITY)
+  ```
+- **DON'T**: Manipulate global state dictionaries directly
+  ```python
+  # Avoid this pattern:
+  awaiting_city_weather[chat_id] = True
+  ```
+
+### Service Return Types
+- **DO**: Return structured value objects
+  ```python
+  async def get_admin_stats(self) -> AdminStatsResult:
+      return AdminStatsResult(user_count=10, blocked_count=1, top_users=[...])
+  ```
+- **DON'T**: Return raw dictionaries or tuples
+  ```python
+  # Avoid this pattern:
+  return {"user_count": 10, "blocked_count": 1}
+  ```
 
 ## 🌍 Internationalization (i18n)
 

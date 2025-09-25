@@ -48,9 +48,14 @@ def get_admin_commands():
     config = get_config()
     if config.admin_ids:
         from weatherbot.handlers.admin_commands import (
+            admin_backup_now_cmd,
             admin_cleanup_cmd,
+            admin_config_cmd,
             admin_help_cmd,
+            admin_quota_cmd,
             admin_stats_cmd,
+            admin_subscriptions_cmd,
+            admin_test_weather_cmd,
             admin_unblock_cmd,
             admin_user_info_cmd,
             admin_version_cmd,
@@ -61,6 +66,11 @@ def get_admin_commands():
             admin_unblock_cmd,
             admin_user_info_cmd,
             admin_cleanup_cmd,
+            admin_subscriptions_cmd,
+            admin_backup_now_cmd,
+            admin_config_cmd,
+            admin_test_weather_cmd,
+            admin_quota_cmd,
             admin_help_cmd,
             admin_version_cmd,
         )
@@ -105,6 +115,11 @@ def main() -> None:
                 admin_unblock_cmd,
                 admin_user_info_cmd,
                 admin_cleanup_cmd,
+                admin_subscriptions_cmd,
+                admin_backup_now_cmd,
+                admin_config_cmd,
+                admin_test_weather_cmd,
+                admin_quota_cmd,
                 admin_help_cmd,
                 admin_version_cmd,
             ) = admin_commands
@@ -112,6 +127,15 @@ def main() -> None:
             app.add_handler(CommandHandler("admin_unblock", admin_unblock_cmd))
             app.add_handler(CommandHandler("admin_user_info", admin_user_info_cmd))
             app.add_handler(CommandHandler("admin_cleanup", admin_cleanup_cmd))
+            app.add_handler(
+                CommandHandler("admin_subscriptions", admin_subscriptions_cmd)
+            )
+            app.add_handler(CommandHandler("admin_backup", admin_backup_now_cmd))
+            app.add_handler(CommandHandler("admin_config", admin_config_cmd))
+            app.add_handler(
+                CommandHandler("admin_test_weather", admin_test_weather_cmd)
+            )
+            app.add_handler(CommandHandler("admin_quota", admin_quota_cmd))
             app.add_handler(CommandHandler("admin_help", admin_help_cmd))
             app.add_handler(CommandHandler("admin_version", admin_version_cmd))
 
