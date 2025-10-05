@@ -1,4 +1,6 @@
 import logging
+from dataclasses import dataclass
+from typing import Awaitable, Callable
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -7,6 +9,11 @@ from weatherbot.__version__ import (
     __release_date__,
     __supported_languages__,
     __version__,
+)
+from weatherbot.application.interfaces import (
+    ConversationStateStoreProtocol,
+    UserServiceProtocol,
+    WeatherApplicationServiceProtocol,
 )
 from weatherbot.core.decorators import spam_check
 from weatherbot.core.exceptions import (
@@ -18,30 +25,81 @@ from weatherbot.core.exceptions import (
 )
 from weatherbot.domain.conversation import ConversationMode
 from weatherbot.handlers.commands import parse_language_input
-from weatherbot.infrastructure.quota_notifications import notify_quota_if_needed
-from weatherbot.infrastructure.setup import (
-    get_subscription_service,
-    get_user_service,
-    get_weather_application_service,
-)
-from weatherbot.infrastructure.state import (
-    awaiting_city_weather,
-    awaiting_language_input,
-    awaiting_sethome,
-    awaiting_subscribe_time,
-    conversation_manager,
-    last_location_by_chat,
-)
-from weatherbot.jobs.scheduler import schedule_daily_timezone_aware
-from weatherbot.presentation.formatter import format_weather
 from weatherbot.presentation.i18n import i18n
 from weatherbot.presentation.keyboards import (
     BTN_LANGUAGE,
     main_keyboard,
 )
+from weatherbot.presentation.subscription_presenter import SubscriptionPresenter
+from weatherbot.presentation.validation import (
+    CityInputModel,
+    SubscribeTimeModel,
+    validate_payload,
+)
 from weatherbot.utils.time import format_reset_time
 
 logger = logging.getLogger(__name__)
+
+
+# Type aliases for dependency injection
+QuotaNotifier = Callable[[object], Awaitable[None]]
+ScheduleSubscription = Callable[[object, int, int, int], Awaitable[None]]
+WeatherFormatter = Callable[..., str]
+
+
+@dataclass
+class MessageHandlerDependencies:
+    user_service: UserServiceProtocol
+    weather_service: WeatherApplicationServiceProtocol
+    state_store: ConversationStateStoreProtocol
+    subscription_presenter: SubscriptionPresenter
+    quota_notifier: QuotaNotifier
+    schedule_subscription: ScheduleSubscription
+    weather_formatter: WeatherFormatter
+
+
+_deps: MessageHandlerDependencies | None = None
+
+
+def configure_message_handlers(deps: MessageHandlerDependencies) -> None:
+    global _deps
+    _deps = deps
+
+
+def _require_deps() -> MessageHandlerDependencies:
+    if _deps is None:
+        raise RuntimeError("Message handler dependencies are not configured")
+    return _deps
+
+
+def get_user_service() -> UserServiceProtocol:
+    return _require_deps().user_service
+
+
+def get_weather_application_service() -> WeatherApplicationServiceProtocol:
+    return _require_deps().weather_service
+
+
+def get_conversation_state_store() -> ConversationStateStoreProtocol:
+    return _require_deps().state_store
+
+
+def get_subscription_presenter() -> SubscriptionPresenter:
+    return _require_deps().subscription_presenter
+
+
+async def notify_quota_if_needed(bot) -> None:
+    await _require_deps().quota_notifier(bot)
+
+
+async def schedule_daily_timezone_aware(
+    job_queue, chat_id: int, hour: int, minute: int
+) -> None:
+    await _require_deps().schedule_subscription(job_queue, chat_id, hour, minute)
+
+
+def format_weather(*args, **kwargs):
+    return _require_deps().weather_formatter(*args, **kwargs)
 
 
 @spam_check
@@ -53,11 +111,10 @@ async def on_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         user_service = get_user_service()
         weather_service = get_weather_application_service()
+        state_store = get_conversation_state_store()
 
         user_lang = await user_service.get_user_language(str(chat_id))
-        conversation_manager.set_location(chat_id, lat, lon)
-        last_location_by_chat[chat_id] = (lat, lon)  # Legacy compatibility
-
+        state_store.set_location(chat_id, lat, lon)
         weather_data = await weather_service.get_weather_by_coordinates(lat, lon)
         msg = format_weather(weather_data, lang=user_lang)
         await update.message.reply_text(
@@ -99,27 +156,19 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     text = update.message.text
     chat_id = update.effective_chat.id
-    try:
-        try:
-            user_service = get_user_service()
-            weather_service = get_weather_application_service()
-            user_lang = await user_service.get_user_language(str(chat_id))
-        except Exception:
+    user_service = get_user_service()
+    weather_service = get_weather_application_service()
+    state_store = get_conversation_state_store()
+    subscription_presenter = get_subscription_presenter()
 
-            user_service = None
-            weather_service = None
-            user_lang = "ru"
+    try:
+        user_lang = await user_service.get_user_language(str(chat_id))
 
         if text.strip().lower() == "/cancel":
-            current_state = conversation_manager.get_state(chat_id)
+            current_state = state_store.get_state(chat_id)
             if current_state.mode != ConversationMode.IDLE:
-                conversation_manager.clear_conversation(chat_id)
+                state_store.clear_conversation(chat_id)
                 # Legacy compatibility cleanup
-                awaiting_sethome.pop(chat_id, None)
-                awaiting_subscribe_time.pop(chat_id, None)
-                awaiting_city_weather.pop(chat_id, None)
-                awaiting_language_input.pop(chat_id, None)
-
                 await update.message.reply_text(
                     i18n.get("operation_cancelled", user_lang),
                     reply_markup=main_keyboard(user_lang),
@@ -132,29 +181,36 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         unset_home_label = i18n.get("remove_home_button", user_lang)
         help_label = i18n.get("help_button", user_lang)
 
-        if conversation_manager.is_awaiting(
-            chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
-        ):
-            conversation_manager.clear_conversation(chat_id)
-            awaiting_subscribe_time.pop(chat_id, None)  # Legacy cleanup
-            subscription_service = get_subscription_service()
+        if state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME):
+            state_store.clear_conversation(chat_id)
             try:
-                hour, minute = await subscription_service.parse_time_string(text)
-                await subscription_service.set_subscription(str(chat_id), hour, minute)
-                if context.application and context.application.job_queue:
+                payload = validate_payload(SubscribeTimeModel, time=text)
+                result = await subscription_presenter.subscribe(
+                    chat_id,
+                    payload.time,
+                    clear_state=False,
+                    validate_input=False,
+                )
+                await update.message.reply_text(
+                    result.message, reply_markup=main_keyboard(result.language)
+                )
+                if (
+                    result.success
+                    and result.schedule
+                    and context.application
+                    and context.application.job_queue
+                ):
                     import asyncio
 
                     asyncio.create_task(
                         schedule_daily_timezone_aware(
-                            context.application.job_queue, chat_id, hour, minute
+                            context.application.job_queue,
+                            chat_id,
+                            result.schedule.hour,
+                            result.schedule.minute,
                         )
                     )
-                await update.message.reply_text(
-                    i18n.get("subscribe_success", user_lang, hour=hour, minute=minute),
-                    reply_markup=main_keyboard(user_lang),
-                )
             except ValidationError as e:
-                # Check if it's home location error and use appropriate message
                 if "Home location must be set" in str(e):
                     error_message = i18n.get("subscribe_home_required", user_lang)
                 else:
@@ -170,13 +226,9 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
             return
 
-        if conversation_manager.is_awaiting(
-            chat_id, ConversationMode.AWAITING_LANGUAGE_INPUT
-        ):
-            conversation_manager.clear_conversation(chat_id)
-            awaiting_language_input.pop(chat_id, None)  # Legacy cleanup
+        if state_store.is_awaiting(chat_id, ConversationMode.AWAITING_LANGUAGE_INPUT):
+            state_store.clear_conversation(chat_id)
             try:
-
                 new_language = parse_language_input(text)
                 if new_language is None:
                     message = i18n.get("language_not_recognized", user_lang)
@@ -204,11 +256,10 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
             return
 
-        if conversation_manager.is_awaiting(chat_id, ConversationMode.AWAITING_SETHOME):
-            conversation_manager.clear_conversation(chat_id)
-            awaiting_sethome.pop(chat_id, None)  # Legacy cleanup
+        if state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SETHOME):
+            state_store.clear_conversation(chat_id)
             try:
-                last_location = conversation_manager.get_last_location(chat_id)
+                last_location = state_store.get_last_location(chat_id)
                 if last_location:
                     lat, lon = last_location
                     await user_service.set_user_home(str(chat_id), lat, lon, text)
@@ -223,25 +274,25 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                         reply_markup=main_keyboard(user_lang),
                     )
                     return
-                else:
-                    geocode_result = await weather_service.geocode_city(text)
-                    if not geocode_result:
-                        raise GeocodeServiceError("not found")
-                    lat, lon, label = geocode_result
-                    await user_service.set_user_home(
-                        str(chat_id), lat, lon, label or text
-                    )
-                    await update.message.reply_text(
-                        i18n.get(
-                            "sethome_success",
-                            user_lang,
-                            location=label or text,
-                            lat=lat,
-                            lon=lon,
-                        ),
-                        reply_markup=main_keyboard(user_lang),
-                    )
-                    return
+
+                geocode_result = await weather_service.geocode_city(text)
+                if not geocode_result:
+                    raise GeocodeServiceError("not found")
+                lat = geocode_result.lat
+                lon = geocode_result.lon
+                label = geocode_result.label or text
+                await user_service.set_user_home(str(chat_id), lat, lon, label)
+                await update.message.reply_text(
+                    i18n.get(
+                        "sethome_success",
+                        user_lang,
+                        location=label or text,
+                        lat=lat,
+                        lon=lon,
+                    ),
+                    reply_markup=main_keyboard(user_lang),
+                )
+                return
             except GeocodeServiceError:
                 await update.message.reply_text(
                     i18n.get("city_not_found", user_lang),
@@ -256,16 +307,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
                 return
 
-        if conversation_manager.is_awaiting(
-            chat_id, ConversationMode.AWAITING_CITY_WEATHER
-        ):
-            conversation_manager.clear_conversation(chat_id)
-            awaiting_city_weather.pop(chat_id, None)  # Legacy cleanup
+        if state_store.is_awaiting(chat_id, ConversationMode.AWAITING_CITY_WEATHER):
+            state_store.clear_conversation(chat_id)
             try:
-                weather_data, label = await weather_service.get_weather_by_city(text)
-                msg = format_weather(
-                    weather_data, place_label=label or text, lang=user_lang
-                )
+                payload = validate_payload(CityInputModel, city=text)
+                weather_result = await weather_service.get_weather_by_city(payload.city)
+                report = weather_result.report
+                place_label = weather_result.location.label or payload.city
+                msg = format_weather(report, place_label=place_label, lang=user_lang)
                 await update.message.reply_text(
                     msg, parse_mode="HTML", reply_markup=main_keyboard(user_lang)
                 )
@@ -313,7 +362,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
                 await notify_quota_if_needed(context.bot)
             except WeatherQuotaExceededError as e:
-                tz_name = home.timezone if "home" in locals() and home else None
+                tz_name = home.timezone if home else None
                 reset_text = format_reset_time(e.reset_at, tz_name)
                 await update.message.reply_text(
                     i18n.get(
@@ -335,20 +384,16 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
 
         elif text == weather_city_label:
-            conversation_manager.set_awaiting_mode(
+            state_store.set_awaiting_mode(
                 chat_id, ConversationMode.AWAITING_CITY_WEATHER
             )
-            awaiting_city_weather[chat_id] = True  # Legacy compatibility
             await update.message.reply_text(
                 i18n.get("enter_city", user_lang),
                 reply_markup=main_keyboard(user_lang),
             )
 
         elif text == set_home_label:
-            conversation_manager.set_awaiting_mode(
-                chat_id, ConversationMode.AWAITING_SETHOME
-            )
-            awaiting_sethome[chat_id] = True  # Legacy compatibility
+            state_store.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
             await update.message.reply_text(
                 i18n.get("enter_home_city", user_lang),
                 reply_markup=main_keyboard(user_lang),
@@ -357,7 +402,6 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         elif text == unset_home_label:
             try:
-
                 removed = await user_service.remove_user_home(str(chat_id))
                 if removed:
                     await update.message.reply_text(
@@ -394,11 +438,12 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await language_cmd.__wrapped__(update, context)
 
         else:
-
             try:
-                weather_data, label = await weather_service.get_weather_by_city(text)
+                payload = validate_payload(CityInputModel, city=text)
+                weather_result = await weather_service.get_weather_by_city(payload.city)
+                place_label = weather_result.location.label or payload.city
                 msg = format_weather(
-                    weather_data, place_label=label or text, lang=user_lang
+                    weather_result.report, place_label=place_label, lang=user_lang
                 )
                 await update.message.reply_text(
                     msg, parse_mode="HTML", reply_markup=main_keyboard(user_lang)
@@ -429,7 +474,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:
         logger.exception(f"Unexpected error handling text '{text}' for {chat_id}")
         try:
-            user_lang = await get_user_service().get_user_language(str(chat_id))
+            user_lang = await user_service.get_user_language(str(chat_id))
         except Exception:
             user_lang = "ru"
         await update.message.reply_text(

@@ -35,3 +35,7 @@ Thumbs.db
 # Backups
 *.backup
 *.bak
+
+# Coverage artefacts
+coverage.xml
+.coverage

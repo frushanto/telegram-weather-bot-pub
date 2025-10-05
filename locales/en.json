@@ -140,7 +140,7 @@
   "admin_version_version": "Version",
   "admin_version_date": "Release date",
   "admin_version_languages": "Languages",
-  "admin_version_whats_new": "What's new in version 2.2.0",
+  "admin_version_whats_new": "What's new in version 3.1.0",
   "admin_version_tech_info": "Technical information",
   "admin_version_error": "Error retrieving version information.",
   "admin_backup_desc": "run storage backup immediately",

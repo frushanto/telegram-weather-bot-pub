@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from weatherbot.application.dtos import CityWeatherDTO, GeocodeResultDTO
 from weatherbot.core.exceptions import WeatherQuotaExceededError
 from weatherbot.domain.value_objects import UserHome, UserProfile
 from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
@@ -157,18 +158,17 @@ async def test_on_text_city_weather():
 
     weather_service = AsyncMock()
     weather_data = _make_report()
-    weather_service.get_weather_by_city.return_value = (weather_data, None)
+    weather_service.get_weather_by_city.return_value = CityWeatherDTO(
+        report=weather_data,
+        location=GeocodeResultDTO(lat=55.7558, lon=37.6176, label=""),
+    )
 
     from weatherbot.domain.conversation import ConversationMode
-    from weatherbot.infrastructure.state import (
-        awaiting_city_weather,
-        conversation_manager,
-    )
+    from weatherbot.infrastructure.setup import get_conversation_state_store
 
-    conversation_manager.set_awaiting_mode(
-        123456, ConversationMode.AWAITING_CITY_WEATHER
-    )
-    awaiting_city_weather[123456] = True  # Legacy compatibility
+    state_store = get_conversation_state_store()
+
+    state_store.set_awaiting_mode(123456, ConversationMode.AWAITING_CITY_WEATHER)
 
     with (
         patch(
@@ -189,26 +189,24 @@ async def test_on_text_city_weather():
     weather_service.get_weather_by_city.assert_awaited_once_with("Москва")
     update.message.reply_text.assert_awaited_once()
 
-    assert 123456 not in awaiting_city_weather
-    assert not conversation_manager.is_awaiting(
-        123456, ConversationMode.AWAITING_CITY_WEATHER
-    )
+    assert not state_store.is_awaiting(123456, ConversationMode.AWAITING_CITY_WEATHER)
 
 
 @pytest.mark.asyncio
 async def test_on_text_set_home():
     from weatherbot.domain.conversation import ConversationMode
-    from weatherbot.infrastructure.state import conversation_manager
+    from weatherbot.infrastructure.setup import get_conversation_state_store
 
-    conversation_manager.set_awaiting_mode(123456, ConversationMode.AWAITING_SETHOME)
+    state_store = get_conversation_state_store()
+
+    state_store.set_awaiting_mode(123456, ConversationMode.AWAITING_SETHOME)
 
     with (
-        patch("weatherbot.handlers.messages.awaiting_sethome", {123456: True}),
-        patch("weatherbot.handlers.messages.last_location_by_chat", {}),
         patch("weatherbot.handlers.messages.get_user_service") as mock_user_service,
         patch(
             "weatherbot.handlers.messages.get_weather_application_service"
         ) as mock_weather_service,
+        patch("weatherbot.handlers.messages.i18n.get", return_value="Дом установлен"),
     ):
         update = MagicMock()
         update.message.text = "Санкт-Петербург"
@@ -223,14 +221,13 @@ async def test_on_text_set_home():
 
         weather_service = AsyncMock()
         weather_service.geocode_city = AsyncMock(
-            return_value=(59.9311, 30.3609, "Санкт-Петербург, Россия")
+            return_value=GeocodeResultDTO(
+                lat=59.9311, lon=30.3609, label="Санкт-Петербург, Россия"
+            )
         )
         mock_weather_service.return_value = weather_service
 
-        with patch(
-            "weatherbot.handlers.messages.i18n.get", return_value="Дом установлен"
-        ):
-            await on_text(update, context)
+        await on_text(update, context)
 
         weather_service.geocode_city.assert_awaited_once_with("Санкт-Петербург")
         user_service.set_user_home.assert_awaited_once()

@@ -2,17 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable, Iterable, List, Optional
+from typing import Callable, List, Optional
 
-from weatherbot.application.subscription_service import SubscriptionService
-from weatherbot.application.weather_service import WeatherApplicationService
-from weatherbot.core.config import ConfigProvider
-from weatherbot.domain.weather import WeatherReport
-from weatherbot.infrastructure.spam_protection import SpamProtection
-from weatherbot.infrastructure.weather_quota import (
-    WeatherApiQuotaManager,
-    WeatherQuotaStatus,
+from weatherbot.application.interfaces import (
+    SubscriptionServiceProtocol,
+    WeatherApplicationServiceProtocol,
+    WeatherQuotaManagerProtocol,
 )
+from weatherbot.core.config import ConfigProvider
+from weatherbot.domain.services import SpamProtectionService
+from weatherbot.domain.weather import WeatherReport
 
 
 @dataclass
@@ -68,13 +67,22 @@ class AdminTestWeatherResult:
     weather_data: WeatherReport
 
 
+@dataclass
+class AdminQuotaStatus:
+    limit: int
+    used: int
+    remaining: int
+    ratio: float
+    reset_at: Optional[datetime]
+
+
 class AdminApplicationService:
     def __init__(
         self,
-        spam_protection: SpamProtection,
-        subscription_service: SubscriptionService,
-        weather_service: WeatherApplicationService,
-        quota_manager: WeatherApiQuotaManager,
+        spam_protection: SpamProtectionService,
+        subscription_service: SubscriptionServiceProtocol,
+        weather_service: WeatherApplicationServiceProtocol,
+        quota_manager: WeatherQuotaManagerProtocol,
         backup_runner: Callable[[], object],
         config_provider: ConfigProvider,
     ) -> None:
@@ -86,8 +94,8 @@ class AdminApplicationService:
         self._config_provider = config_provider
 
     async def get_stats(self) -> AdminStatsResult:
-        activities = self._spam_protection.user_activities
-        blocked_users: Iterable[int] = self._spam_protection.blocked_users
+        activities = self._spam_protection.get_user_activity_snapshot()
+        blocked_users = set(self._spam_protection.get_blocked_users())
         blocked_lookup = {self._to_int(user_id) for user_id in blocked_users}
 
         top_users: List[AdminTopUser] = []
@@ -110,7 +118,7 @@ class AdminApplicationService:
 
         return AdminStatsResult(
             user_count=len(activities),
-            blocked_count=len(self._spam_protection.blocked_users),
+            blocked_count=len(blocked_users),
             top_users=top_users,
         )
 
@@ -118,7 +126,7 @@ class AdminApplicationService:
         return await self._spam_protection.unblock_user(user_id)
 
     async def get_user_info(self, user_id: int) -> AdminUserInfo:
-        stats = self._spam_protection.get_user_stats(user_id)
+        stats = await self._spam_protection.get_user_stats(user_id)
         blocked_until_ts = stats.get("blocked_until")
         blocked_until_dt: Optional[datetime] = None
         if blocked_until_ts:
@@ -170,12 +178,21 @@ class AdminApplicationService:
         )
 
     async def test_weather(self, city: str) -> AdminTestWeatherResult:
-        weather_data, label = await self._weather_service.get_weather_by_city(city)
-        place = label or city
-        return AdminTestWeatherResult(place_label=place, weather_data=weather_data)
+        weather_result = await self._weather_service.get_weather_by_city(city)
+        place = weather_result.location.label or city
+        return AdminTestWeatherResult(
+            place_label=place, weather_data=weather_result.report
+        )
 
-    async def get_quota_status(self) -> WeatherQuotaStatus:
-        return await self._quota_manager.get_status()
+    async def get_quota_status(self) -> AdminQuotaStatus:
+        quota_status = await self._quota_manager.get_status()
+        return AdminQuotaStatus(
+            limit=quota_status.limit,
+            used=quota_status.used,
+            remaining=quota_status.remaining,
+            ratio=quota_status.ratio,
+            reset_at=quota_status.reset_at,
+        )
 
     @staticmethod
     def _to_int(value) -> int:

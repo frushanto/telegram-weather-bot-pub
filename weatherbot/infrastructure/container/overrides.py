@@ -1,11 +1,14 @@
-"""Convenience helpers for building DI override dictionaries."""
-
 from typing import Any, Callable, Dict, Type, Union
 
-from weatherbot.application.admin_service import AdminApplicationService
-from weatherbot.application.subscription_service import SubscriptionService
-from weatherbot.application.user_service import UserService
-from weatherbot.application.weather_service import WeatherApplicationService
+import httpx
+
+from weatherbot.application.interfaces import (
+    AdminApplicationServiceProtocol,
+    SubscriptionServiceProtocol,
+    UserServiceProtocol,
+    WeatherApplicationServiceProtocol,
+    WeatherQuotaManagerProtocol,
+)
 from weatherbot.domain.repositories import UserRepository
 from weatherbot.domain.services import (
     GeocodeService,
@@ -20,50 +23,71 @@ OverrideMap = Dict[Type[Any], OverrideValue]
 
 
 def _wrap(value: OverrideValue) -> OverrideValue:
+
     return value
 
 
 def override_user_repository(value: OverrideValue) -> OverrideMap:
+
     return {UserRepository: _wrap(value)}
 
 
 def override_weather_service(value: OverrideValue) -> OverrideMap:
+
     return {WeatherService: _wrap(value)}
 
 
 def override_geocode_service(value: OverrideValue) -> OverrideMap:
+
     return {GeocodeService: _wrap(value)}
 
 
+def override_http_client(value: OverrideValue) -> OverrideMap:
+
+    return {httpx.AsyncClient: _wrap(value)}
+
+
 def override_spam_protection_service(value: OverrideValue) -> OverrideMap:
+
     return {SpamProtectionService: _wrap(value)}
 
 
 def override_weather_quota_manager(value: OverrideValue) -> OverrideMap:
-    return {WeatherApiQuotaManager: _wrap(value)}
+
+    wrapped = _wrap(value)
+    return {
+        WeatherApiQuotaManager: wrapped,
+        WeatherQuotaManagerProtocol: wrapped,
+    }
 
 
 def override_timezone_service(value: OverrideValue) -> OverrideMap:
+
     return {TimezoneService: _wrap(value)}
 
 
 def override_user_service(value: Callable[[], Any]) -> OverrideMap:
-    return {UserService: value}
+
+    return {UserServiceProtocol: value}
 
 
 def override_weather_application_service(value: Callable[[], Any]) -> OverrideMap:
-    return {WeatherApplicationService: value}
+
+    return {WeatherApplicationServiceProtocol: value}
 
 
 def override_subscription_service(value: Callable[[], Any]) -> OverrideMap:
-    return {SubscriptionService: value}
+
+    return {SubscriptionServiceProtocol: value}
 
 
 def override_admin_service(value: Callable[[], Any]) -> OverrideMap:
-    return {AdminApplicationService: value}
+
+    return {AdminApplicationServiceProtocol: value}
 
 
 def merge_overrides(*overrides: OverrideMap) -> OverrideMap:
+
     merged: OverrideMap = {}
     for mapping in overrides:
         merged.update(mapping)

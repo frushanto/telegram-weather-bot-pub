@@ -1,7 +1,7 @@
 # Telegram Weather Bot
 
 [![CI/CD Pipeline](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml/badge.svg)](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](weatherbot/__version__.py)
+[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](weatherbot/__version__.py)
 [![Python](https://img.shields.io/badge/python-3.12-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
@@ -166,6 +166,20 @@ weatherbot/
 ├── data/           # Example data and storage (data/storage.json)
 └── tests/          # Test suite
 ```
+
+Runtime composition happens in `app.py`, where a lightweight dependency container is
+configured and feature modules are loaded in a deterministic order. The core modules are:
+
+- `ObservabilityModule` – configures logging, metrics, tracing, and health checks.
+- `AdminModule` – conditionally registers admin-only commands when `ADMIN_IDS` are set.
+- `CommandModule` – wires user-facing commands, presenters, conversation state, and
+  quota notifications.
+- `JobsModule` – restores daily subscription jobs and schedules background maintenance
+  such as backups and spam-cleanup.
+
+Modules communicate via a shared event bus and mediator (`weatherbot.core.events`) so that
+features like metrics collection or subscription restoration remain decoupled from the
+Telegram handlers.
 
 For detailed architecture documentation, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -355,21 +369,13 @@ python app.py
 
 See `weatherbot/__version__.RELEASE_NOTES` for detailed version history and updates.
 
-## 🆕 What's New — Version 3.0.0
+## 🆕 What's New — Version 3.1.0
 
-### 🎯 Major Release Highlights
-- **🏗️ Value Object Architecture**: Complete architectural transformation with immutable value objects throughout all layers
-- **�️ Admin System Overhaul**: New structured admin service with comprehensive management capabilities
-- **🔧 Infrastructure Revolution**: Enhanced DI container, weather quota system, and configuration management
-- **�🎯 Conversation State Management**: Replaced global dict state with structured `ConversationStateManager`
-- **🔒 Type Safety**: Rich domain objects (`UserProfile`, `ConversationState`, `AdminStatsResult`, `WeatherQuotaStatus`)
-- **🧪 Enhanced Testing**: 218 tests with improved patterns and comprehensive coverage
-
-### 📈 Performance & Reliability
-- **Global API Quota**: Intelligent weather API budget management with automatic notifications
-- **Timezone Support**: User-specific time zones for accurate subscription delivery
-- **Improved Error Handling**: Structured exceptions and better user feedback
-- **Enhanced Security**: Better input validation and spam protection
+### ✨ Release Highlights
+- **✅ Consistent Metadata**: All version references (badge, packaging, admin UI strings) now point to v3.1.0
+- **📝 Documentation Refresh**: Updated README and release notes to make the upgrade path obvious for operators
+- **🧭 Container Guidance**: Added inline comments/docstrings that explain how dependency wiring and instrumentation works
+- **🧹 Repository Cleanup**: Removed an outdated coverage artefact to keep the tree ready for packaging
 
 For full release notes see `weatherbot.__version__.RELEASE_NOTES` or the project's changelog when available.
 

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from weatherbot.application.dtos import GeocodeResultDTO
 from weatherbot.application.subscription_service import SubscriptionService
 from weatherbot.application.user_service import UserService
 from weatherbot.application.weather_service import WeatherApplicationService
@@ -230,14 +231,16 @@ async def test_weather_application_service():
         ],
     )
     mock_weather_service.get_weather.return_value = mock_weather_data
-    mock_geocode_service.geocode_city.return_value = (55.7558, 37.6176, "Москва")
+    mock_geocode_service.geocode_city.return_value = GeocodeResultDTO(
+        lat=55.7558, lon=37.6176, label="Москва"
+    )
 
     weather = await weather_app_service.get_weather_by_coordinates(55.7558, 37.6176)
     assert weather == mock_weather_data
 
-    weather, label = await weather_app_service.get_weather_by_city("Москва")
-    assert weather == mock_weather_data
-    assert label == "Москва"
+    city_weather = await weather_app_service.get_weather_by_city("Москва")
+    assert city_weather.report == mock_weather_data
+    assert city_weather.location.label == "Москва"
 
     with pytest.raises(ValidationError):
         await weather_app_service.get_weather_by_coordinates(91.0, 0)

@@ -1,9 +1,19 @@
-__version__ = "3.0.0"
-__version_info__ = (3, 0, 0)
-__release_date__ = "25.09.2025"
+__version__ = "3.1.0"
+__version_info__ = (3, 1, 0)
+__release_date__ = "02.10.2025"
 __supported_languages__ = "Русский, English, Deutsch"
 
 RELEASE_NOTES = """
+🎉 New in 3.1.0
+---------------
+- ✅ Release metadata aligned across packaging, documentation, and localization
+- ✅ Documentation refreshed with concise 3.1.0 highlights for operators and admins
+- ✅ Dependency container bootstrap clarified with maintainer-facing guidance
+- ✅ Repository hygiene improvements by dropping outdated coverage artefacts
+
+Previous Releases
+==================
+
 🎉 New in 3.0.0
 ---------------
 - ✅ Value Object Architecture: Complete migration to immutable value objects throughout all layers
@@ -17,9 +27,6 @@ RELEASE_NOTES = """
 - ✅ Modular DI Container: Enhanced dependency injection with override capabilities
 - ✅ Documentation Updates: Comprehensive architecture and contributing guidelines updates
 - ⚠️  BREAKING CHANGES: Handler layer now uses structured conversation state instead of global dicts
-
-Previous Releases
-==================
 
 ✨ New in 2.2.0
 ---------------

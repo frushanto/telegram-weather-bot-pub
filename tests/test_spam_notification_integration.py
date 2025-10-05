@@ -20,7 +20,10 @@ async def test_blocked_user_spam_notification_throttling():
         handler_called.append(True)
         return "Handler executed"
 
-    with patch("weatherbot.core.decorators.spam_protection", spam_protection):
+    with patch(
+        "weatherbot.core.decorators._get_spam_service",
+        return_value=spam_protection,
+    ):
 
         long_message = "x" * 1001
         update1 = MagicMock()
@@ -75,7 +78,10 @@ async def test_unblocked_user_gets_notification_again():
         handler_called.append(True)
         return "Handler executed"
 
-    with patch("weatherbot.core.decorators.spam_protection", spam_protection):
+    with patch(
+        "weatherbot.core.decorators._get_spam_service",
+        return_value=spam_protection,
+    ):
 
         await spam_protection._block_user(123456, "Test block")
 

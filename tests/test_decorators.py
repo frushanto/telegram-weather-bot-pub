@@ -2,31 +2,55 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from weatherbot.core.decorators import admin_only, spam_check
+from weatherbot.core.decorators import (
+    admin_only,
+    reset_decorator_configuration,
+    spam_check,
+)
+
+
+@pytest.fixture(autouse=True)
+def reset_decorators():
+    reset_decorator_configuration()
+    yield
+    reset_decorator_configuration()
 
 
 class TestDecorators:
 
-    def test_admin_only_decorator_allows_admin(self):
+    @pytest.mark.asyncio
+    async def test_admin_only_decorator_allows_admin(self):
 
-        @admin_only([12345])
+        @admin_only({12345})
         async def test_function(update, context):
             return "success"
 
         update = MagicMock()
         update.effective_user.id = 12345
+        update.message = None
         context = MagicMock()
 
-    def test_admin_only_decorator_blocks_non_admin(self):
+        result = await test_function(update, context)
+        assert result == "success"
 
-        @admin_only([12345])
+    @pytest.mark.asyncio
+    async def test_admin_only_decorator_blocks_non_admin(self):
+
+        @admin_only({12345})
         async def test_function(update, context):
             return "success"
 
         update = MagicMock()
         update.effective_user.id = 99999
-        update.message.reply_text = MagicMock()
+        update.message = MagicMock()
+        update.message.reply_text = AsyncMock()
+        update.callback_query = None
         context = MagicMock()
+
+        result = await test_function(update, context)
+
+        assert result is None
+        update.message.reply_text.assert_awaited_with("no_admin_rights")
 
     @pytest.mark.asyncio
     async def test_spam_check_allows_normal_user(self):
@@ -37,13 +61,17 @@ class TestDecorators:
 
         update = MagicMock()
         update.effective_chat.id = 123456
+        update.effective_user = MagicMock()
+        update.effective_user.id = 123456
+        update.message = MagicMock()
+        update.message.text = "hello"
+        update.callback_query = None
         context = MagicMock()
-        with patch("weatherbot.core.decorators.spam_protection") as mock_spam:
+        with patch("weatherbot.core.decorators._get_spam_service") as mock_get_spam:
 
-            async def mock_is_spam(*args, **kwargs):
-                return (False, "")
-
-            mock_spam.is_spam = mock_is_spam
+            spam_service = MagicMock()
+            spam_service.is_spam = AsyncMock(return_value=(False, ""))
+            mock_get_spam.return_value = spam_service
             result = await test_function(update, context)
         assert result == "success"
 
@@ -56,14 +84,18 @@ class TestDecorators:
 
         update = MagicMock()
         update.effective_chat.id = 123456
+        update.effective_user = MagicMock()
+        update.effective_user.id = 123456
+        update.message = MagicMock()
+        update.message.text = "hello"
         update.message.reply_text = AsyncMock()
+        update.callback_query = None
         context = MagicMock()
-        with patch("weatherbot.core.decorators.spam_protection") as mock_spam:
+        with patch("weatherbot.core.decorators._get_spam_service") as mock_get_spam:
 
-            async def mock_is_spam(*args, **kwargs):
-                return (True, "Too many requests")
-
-            mock_spam.is_spam = mock_is_spam
+            spam_service = MagicMock()
+            spam_service.is_spam = AsyncMock(return_value=(True, "Too many requests"))
+            mock_get_spam.return_value = spam_service
             result = await test_function(update, context)
 
         assert result is None

@@ -39,6 +39,10 @@ class BotConfig:
     weather_api_quota_path: str = "data/weather_api_quota.json"
     weather_service_provider: str = "open-meteo"
     geocode_service_provider: str = "nominatim"
+    metrics_host: str = "127.0.0.1"
+    metrics_port: int = 9000
+    health_host: str = "127.0.0.1"
+    health_port: int = 9001
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -97,6 +101,10 @@ class BotConfig:
         geocode_service_provider = os.getenv(
             "GEOCODE_SERVICE_PROVIDER", "nominatim"
         ).lower()
+        metrics_host = os.getenv("METRICS_HOST", "127.0.0.1")
+        metrics_port = int(os.getenv("METRICS_PORT", "9000"))
+        health_host = os.getenv("HEALTH_HOST", "127.0.0.1")
+        health_port = int(os.getenv("HEALTH_PORT", "9001"))
 
         return cls(
             token=token,
@@ -111,6 +119,10 @@ class BotConfig:
             weather_api_quota_path=weather_api_quota_path,
             weather_service_provider=weather_service_provider,
             geocode_service_provider=geocode_service_provider,
+            metrics_host=metrics_host,
+            metrics_port=metrics_port,
+            health_host=health_host,
+            health_port=health_port,
         )
 
 

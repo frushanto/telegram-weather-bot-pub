@@ -126,28 +126,29 @@ class TestMultiLanguageSupport:
     @pytest.mark.asyncio
     async def test_command_responses_all_languages(self, languages):
 
+        from weatherbot.handlers import commands
         from weatherbot.handlers.commands import start_cmd
+        from weatherbot.presentation.command_presenter import (
+            KeyboardView,
+            PresenterResponse,
+        )
 
         for lang in languages:
             update = MagicMock()
             update.effective_chat.id = 123456
             update.message.reply_text = AsyncMock()
             context = MagicMock()
-            with (
-                patch("weatherbot.handlers.commands.get_user_service") as mock_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language = AsyncMock(return_value=lang)
-                mock_service.return_value = user_service
-                mock_i18n.return_value = f"Start message for {lang}"
-                await start_cmd(update, context)
-
-                user_service.get_user_language.assert_called_once_with("123456")
-                assert update.message.reply_text.call_count >= 1
-
-                update.message.reply_text.assert_called()
+            # stub presenter.start
+            commands._deps.command_presenter.start = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Start message for {lang}",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
+                )
+            )
+            await start_cmd(update, context)
+            commands._deps.command_presenter.start.assert_awaited_with(123456)
+            update.message.reply_text.assert_awaited()
 
     def test_language_consistency(self, load_locales, languages):
 

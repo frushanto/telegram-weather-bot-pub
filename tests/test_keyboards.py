@@ -1,7 +1,8 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from weatherbot.presentation.i18n import Localization
 from weatherbot.presentation.keyboards import (
     BTN_LANGUAGE,
     language_keyboard,
@@ -95,7 +96,7 @@ class TestKeyboardInteractions:
 
     @pytest.mark.asyncio
     async def test_language_keyboard_callback(self):
-        from weatherbot.handlers.language import language_callback
+        import weatherbot.handlers.language as language_module
 
         update = MagicMock()
         update.callback_query.data = "lang_en"
@@ -103,18 +104,22 @@ class TestKeyboardInteractions:
         update.callback_query.message.edit_text = AsyncMock()
         update.effective_chat.id = 123456
         context = MagicMock()
+        context.bot = AsyncMock()
 
-        with (
-            patch("weatherbot.handlers.language.get_user_service") as mock_get_service,
-            patch("weatherbot.handlers.language.i18n.get") as mock_i18n,
-        ):
-            user_service = AsyncMock()
-            mock_get_service.return_value = user_service
-            user_service.set_user_language = AsyncMock()
-            mock_i18n.return_value = "Language changed"
-            await language_callback(update, context)
+        user_service = AsyncMock()
+        user_service.set_user_language = AsyncMock()
 
-            user_service.set_user_language.assert_awaited_once_with("123456", "en")
+        language_module.configure_language_handlers(
+            language_module.LanguageHandlerDependencies(
+                user_service=user_service,
+                localization=Localization(),
+                keyboard_factory=lambda _lang: None,
+            )
+        )
+
+        await language_module.language_callback(update, context)
+
+        user_service.set_user_language.assert_awaited_once_with("123456", "en")
 
     def test_keyboard_button_consistency(self):
 

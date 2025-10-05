@@ -70,7 +70,7 @@ async def test_user_stats(spam_protection):
 
     await spam_protection.is_spam(user_id, "test")
 
-    stats = spam_protection.get_user_stats(user_id)
+    stats = await spam_protection.get_user_stats(user_id)
     assert stats["requests_today"] == 1
     assert not stats["is_blocked"]
     assert stats["block_count"] == 0
@@ -83,13 +83,13 @@ async def test_user_unblock(spam_protection):
 
     await spam_protection._block_user(user_id, "test reason")
 
-    stats = spam_protection.get_user_stats(user_id)
+    stats = await spam_protection.get_user_stats(user_id)
     assert stats["is_blocked"]
 
     success = await spam_protection.unblock_user(user_id)
     assert success
 
-    stats = spam_protection.get_user_stats(user_id)
+    stats = await spam_protection.get_user_stats(user_id)
     assert not stats["is_blocked"]
 
 

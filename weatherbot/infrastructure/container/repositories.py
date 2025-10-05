@@ -1,7 +1,7 @@
 from typing import Any, Callable, Dict, Optional, Type, Union
 
 from weatherbot.core.config import BotConfig
-from weatherbot.core.container import container
+from weatherbot.core.container import get_container
 from weatherbot.domain.repositories import UserRepository
 from weatherbot.infrastructure.json_repository import JsonUserRepository
 
@@ -14,6 +14,8 @@ def _register_singleton(
     factory: Callable[[], Any],
 ) -> Any:
     value: Any
+    container = get_container()
+
     if overrides and interface in overrides:
         override = overrides[interface]
         value = override() if callable(override) else override

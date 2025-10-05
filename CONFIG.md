@@ -12,6 +12,17 @@ This document lists all environment variables and configuration aspects of the T
 | `TIMEZONE`       | No         | `Europe/Berlin` | Default timezone used for scheduled tasks (affects backup scheduling).         |
 | `STORAGE_PATH`   | No         | `data/storage.json` | Path to JSON file storing user data.                                            |
 
+## Observability Endpoints
+
+The bot exposes Prometheus metrics and simple health endpoints. By default both servers bind to `127.0.0.1` so they are not reachable from other machines. To publish them externally, override the host via environment variables:
+
+| Variable       | Default     | Description |
+| -------------- | ----------- | ----------- |
+| `METRICS_HOST` | `127.0.0.1` | Host interface for the metrics server. Set to `0.0.0.0` or a specific interface to expose externally. |
+| `METRICS_PORT` | `9000`      | TCP port for the metrics server. |
+| `HEALTH_HOST`  | `127.0.0.1` | Host interface for health/ready/live endpoints. Override to expose externally. |
+| `HEALTH_PORT`  | `9001`      | TCP port for the health endpoints. |
+
 ## Spam Protection Variables
 
 | Variable                       | Default | Description                                                   |
@@ -126,4 +137,10 @@ SPAM_BLOCK_DURATION=300
 SPAM_EXTENDED_BLOCK_DURATION=3600
 SPAM_MIN_COOLDOWN=1.0
 SPAM_MAX_MESSAGE_LENGTH=1000
+
+# Observability (override host to expose endpoints)
+METRICS_HOST=127.0.0.1
+METRICS_PORT=9000
+HEALTH_HOST=127.0.0.1
+HEALTH_PORT=9001
 ```

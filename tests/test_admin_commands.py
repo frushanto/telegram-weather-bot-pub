@@ -4,9 +4,11 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import pytz
 
 from weatherbot.application.admin_service import (
     AdminConfigSnapshot,
+    AdminQuotaStatus,
     AdminStatsResult,
     AdminSubscriptionEntry,
     AdminSubscriptionsResult,
@@ -15,7 +17,7 @@ from weatherbot.application.admin_service import (
     AdminUserInfo,
 )
 from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
-from weatherbot.infrastructure.weather_quota import WeatherQuotaStatus
+from weatherbot.presentation.i18n import Localization
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +39,19 @@ def admin_handlers(monkeypatch):
     import weatherbot.handlers.admin_commands as admin_cmd
 
     service = AsyncMock()
-    monkeypatch.setattr(admin_cmd, "get_admin_service", lambda: service)
+    localization = Localization()
+    config = SimpleNamespace(
+        admin_ids={1}, admin_language="ru", timezone=pytz.timezone("UTC")
+    )
+
+    admin_cmd.configure_admin_handlers(
+        admin_cmd.AdminHandlerDependencies(
+            admin_service=service,
+            localization=localization,
+            config_provider=lambda: config,
+        )
+    )
+
     return service, admin_cmd
 
 
@@ -263,19 +277,24 @@ async def test_admin_test_weather_not_found(admin_handlers):
 @pytest.mark.asyncio
 async def test_admin_quota_functionality(admin_handlers, monkeypatch):
     service, admin_cmd = admin_handlers
-    status = WeatherQuotaStatus(
+    status = AdminQuotaStatus(
         limit=10,
         used=8,
         remaining=2,
         reset_at=datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc),
         ratio=0.8,
-        pending_alert_thresholds=(),
     )
     service.get_quota_status.return_value = status
 
-    config_stub = SimpleNamespace(admin_language="ru", timezone=timezone.utc)
-    monkeypatch.setattr(
-        "weatherbot.handlers.admin_commands.get_config", lambda: config_stub
+    config_stub = SimpleNamespace(
+        admin_ids={1}, admin_language="ru", timezone=timezone.utc
+    )
+    admin_cmd.configure_admin_handlers(
+        admin_cmd.AdminHandlerDependencies(
+            admin_service=service,
+            localization=Localization(),
+            config_provider=lambda: config_stub,
+        )
     )
 
     update = MagicMock()

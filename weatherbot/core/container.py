@@ -1,5 +1,6 @@
 import inspect
 import logging
+from contextvars import ContextVar
 from typing import Any, Callable, Dict, Type, TypeVar
 
 T = TypeVar("T")
@@ -9,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 class Container:
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._services: Dict[str, Any] = {}
         self._singletons: Dict[str, Any] = {}
-        self._factories: Dict[str, Callable] = {}
+        self._factories: Dict[str, Callable[[], Any]] = {}
 
     def register_singleton(self, interface: Type[T], implementation: T) -> None:
 
@@ -62,4 +63,41 @@ class Container:
         self._factories.clear()
 
 
-container = Container()
+_current_container: ContextVar[Container | None] = ContextVar(
+    "_current_container", default=None
+)
+
+
+def set_container(container: Container) -> None:
+
+    _current_container.set(container)
+
+
+def get_container() -> Container:
+
+    container = _current_container.get()
+    if container is None:
+        raise RuntimeError("Dependency container has not been initialised")
+    return container
+
+
+def reset_container() -> None:
+
+    container = _current_container.get()
+    if container is not None:
+        container.clear()
+    _current_container.set(None)
+
+
+class ContainerProxy:
+
+    def __getattr__(self, item: str) -> Any:
+
+        return getattr(get_container(), item)
+
+    def __call__(self) -> Container:
+
+        return get_container()
+
+
+container = ContainerProxy()

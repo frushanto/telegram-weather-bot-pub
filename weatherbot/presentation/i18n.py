@@ -3,6 +3,8 @@ import logging
 from pathlib import Path
 from typing import Dict
 
+from weatherbot.core.container import get_container
+
 logger = logging.getLogger(__name__)
 
 
@@ -70,4 +72,39 @@ class Localization:
         return list(self.translations.keys())
 
 
-i18n = Localization()
+class LocalizationProxy:
+
+    def __init__(self) -> None:
+
+        self._fallback: Localization | None = None
+
+    def _resolve(self) -> Localization:
+
+        try:
+            container = get_container()
+        except RuntimeError:
+            return self._get_fallback()
+
+        try:
+            return container.get(Localization)
+        except ValueError:
+            fallback = self._get_fallback()
+            container.register_singleton(Localization, fallback)
+            return fallback
+
+    def _get_fallback(self) -> Localization:
+
+        if self._fallback is None:
+            self._fallback = Localization()
+        return self._fallback
+
+    def get(self, key: str, lang: str = None, **kwargs) -> str:
+
+        return self._resolve().get(key, lang, **kwargs)
+
+    def get_available_languages(self) -> list:
+
+        return self._resolve().get_available_languages()
+
+
+i18n = LocalizationProxy()

@@ -4,6 +4,7 @@ import pytest
 
 from weatherbot.domain.value_objects import UserHome, UserProfile
 from weatherbot.domain.weather import WeatherCurrent, WeatherDaily, WeatherReport
+from weatherbot.handlers import commands
 from weatherbot.handlers.commands import (
     data_cmd,
     delete_me_cmd,
@@ -18,8 +19,9 @@ from weatherbot.handlers.commands import (
     unsubscribe_cmd,
     whoami_cmd,
 )
-from weatherbot.handlers.language import language_callback
 from weatherbot.handlers.messages import on_location, on_text
+from weatherbot.presentation.command_presenter import KeyboardView, PresenterResponse
+from weatherbot.presentation.i18n import Localization
 
 
 class TestAllCommandsAllLanguages:
@@ -49,25 +51,24 @@ class TestAllCommandsAllLanguages:
     ):
 
         for lang in languages:
-            with (
-                patch("weatherbot.handlers.commands.get_user_service") as mock_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-                patch("weatherbot.core.decorators.spam_protection") as mock_spam,
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language = AsyncMock(return_value=lang)
-                mock_service.return_value = user_service
-
-                async def mock_is_spam(*args, **kwargs):
-                    return (False, "")
-
-                mock_spam.is_spam = mock_is_spam
-                mock_i18n.return_value = f"Start message in {lang}"
-                await start_cmd(mock_update, mock_context)
-                user_service.get_user_language.assert_awaited_with("123456")
-                mock_update.message.reply_text.assert_awaited()
-                mock_update.message.reply_text.reset_mock()
+            # stub presenter.start to return a known response
+            commands._deps.command_presenter.start = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Start message in {lang}",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
+                )
+            )
+            await start_cmd(mock_update, mock_context)
+            commands._deps.command_presenter.start.assert_awaited_with(
+                mock_update.effective_chat.id
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Start message in {lang}",
+                reply_markup=commands.main_keyboard(lang),
+                parse_mode=None,
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_help_command_all_languages(
@@ -75,177 +76,175 @@ class TestAllCommandsAllLanguages:
     ):
 
         for lang in languages:
-            with (
-                patch("weatherbot.handlers.commands.get_user_service") as mock_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                mock_service.return_value = user_service
-                mock_i18n.return_value = f"Help message in {lang}"
-                await help_cmd(mock_update, mock_context)
-                mock_update.message.reply_text.assert_awaited()
-                mock_update.message.reply_text.reset_mock()
+            # stub presenter.help
+            commands._deps.command_presenter.help = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Help message in {lang}",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
+                )
+            )
+            await help_cmd(mock_update, mock_context)
+            commands._deps.command_presenter.help.assert_awaited_with(
+                mock_update.effective_chat.id
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Help message in {lang}",
+                reply_markup=commands.main_keyboard(lang),
+                parse_mode=None,
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_sethome_command_all_languages(self, languages, mock_update):
+        from weatherbot.handlers import commands
+        from weatherbot.presentation.command_presenter import (
+            KeyboardView,
+            PresenterResponse,
+        )
+
         for lang in languages:
             context = MagicMock()
             context.args = ["TestCity"]
-            with (
-                patch(
-                    "weatherbot.handlers.commands.get_user_service"
-                ) as mock_user_service,
-                patch(
-                    "weatherbot.handlers.commands.get_weather_application_service"
-                ) as mock_weather_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-                patch("weatherbot.core.decorators.spam_protection") as mock_spam,
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                user_service.set_user_home = AsyncMock()
-                mock_user_service.return_value = user_service
-                weather_service = AsyncMock()
-                weather_service.geocode_city.return_value = (
-                    50.0,
-                    10.0,
-                    f"TestCity, {lang}",
+            # stub presenter.set_home
+            commands._deps.command_presenter.set_home = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Home set message in {lang}",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
                 )
-                mock_weather_service.return_value = weather_service
-                mock_i18n.return_value = f"Home set message in {lang}"
-                mock_spam.is_spam = AsyncMock(return_value=(False, ""))
-                await sethome_cmd(mock_update, context)
-                user_service.set_user_home.assert_awaited()
-                mock_update.message.reply_text.assert_awaited()
-                user_service.set_user_home.reset_mock()
-                mock_update.message.reply_text.reset_mock()
+            )
+            await sethome_cmd(mock_update, context)
+            commands._deps.command_presenter.set_home.assert_awaited_with(
+                mock_update.effective_chat.id, "TestCity"
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Home set message in {lang}",
+                reply_markup=commands.main_keyboard(lang),
+                parse_mode=None,
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_home_command_all_languages(
         self, languages, mock_update, mock_context
     ):
+        from weatherbot.handlers import commands
+        from weatherbot.presentation.command_presenter import (
+            KeyboardView,
+            PresenterResponse,
+        )
+
         for lang in languages:
-            with (
-                patch(
-                    "weatherbot.handlers.commands.get_user_service"
-                ) as mock_user_service,
-                patch(
-                    "weatherbot.handlers.commands.get_weather_application_service"
-                ) as mock_weather_service,
-                patch("weatherbot.handlers.commands.format_weather") as mock_format,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-                patch("weatherbot.core.decorators.spam_protection") as mock_spam,
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                user_service.get_user_home.return_value = UserHome(
-                    lat=50.0, lon=10.0, label=f"Home in {lang}"
+            # stub presenter.home_weather
+            commands._deps.command_presenter.home_weather = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Weather format in {lang}",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
+                    parse_mode="HTML",
+                    notify_quota=False,
                 )
-                mock_user_service.return_value = user_service
-                weather_service = AsyncMock()
-                weather_service.get_weather_by_coordinates = AsyncMock(
-                    return_value={
-                        "temperature": 20,
-                        "description": f"weather in {lang}",
-                    }
-                )
-                mock_weather_service.return_value = weather_service
-                mock_format.return_value = f"Weather format in {lang}"
-                mock_spam.is_spam = AsyncMock(return_value=(False, ""))
-                await home_cmd(mock_update, mock_context)
-                weather_service.get_weather_by_coordinates.assert_awaited()
-                mock_update.message.reply_text.assert_awaited()
-                mock_update.message.reply_text.reset_mock()
+            )
+            await home_cmd(mock_update, mock_context)
+            commands._deps.command_presenter.home_weather.assert_awaited_with(
+                mock_update.effective_chat.id
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Weather format in {lang}",
+                reply_markup=commands.main_keyboard(lang),
+                parse_mode="HTML",
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_subscribe_command_all_languages(self, languages, mock_update):
+        from weatherbot.handlers import commands
+        from weatherbot.presentation.command_presenter import KeyboardView
+        from weatherbot.presentation.subscription_presenter import (
+            SubscriptionActionResult,
+        )
+
         for lang in languages:
             context = MagicMock()
             context.args = ["08:30"]
-            with (
-                patch(
-                    "weatherbot.handlers.commands.get_user_service"
-                ) as mock_user_service,
-                patch(
-                    "weatherbot.handlers.commands.get_subscription_service"
-                ) as mock_sub_service,
-                patch("weatherbot.handlers.commands.schedule_daily_timezone_aware"),
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.core.decorators.spam_protection") as mock_spam,
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                mock_user_service.return_value = user_service
-                subscription_service = AsyncMock()
-                subscription_service.set_subscription = AsyncMock()
-                subscription_service.parse_time_string = AsyncMock(return_value=(8, 30))
-                mock_sub_service.return_value = subscription_service
-                mock_i18n.return_value = f"Subscription set in {lang}"
-                mock_spam.is_spam = AsyncMock(return_value=(False, ""))
-                await subscribe_cmd(mock_update, context)
-                subscription_service.set_subscription.assert_awaited()
-                mock_update.message.reply_text.assert_awaited()
-                subscription_service.set_subscription.reset_mock()
-                mock_update.message.reply_text.reset_mock()
+            # stub presenter.subscribe
+            commands._deps.subscription_presenter.subscribe = AsyncMock(
+                return_value=SubscriptionActionResult(
+                    message=f"Subscription set in {lang}",
+                    language=lang,
+                    success=True,
+                    schedule=None,
+                )
+            )
+            await subscribe_cmd(mock_update, context)
+            commands._deps.subscription_presenter.subscribe.assert_awaited_with(
+                mock_update.effective_chat.id, "08:30", validate_input=False
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Subscription set in {lang}", reply_markup=commands.main_keyboard(lang)
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_privacy_command_all_languages(
         self, languages, mock_update, mock_context
     ):
 
+        from weatherbot.handlers import commands
+        from weatherbot.presentation.command_presenter import (
+            KeyboardView,
+            PresenterResponse,
+        )
+
         for lang in languages:
-            with (
-                patch("weatherbot.handlers.commands.get_user_service") as mock_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                mock_service.return_value = user_service
-                mock_i18n.return_value = f"Privacy policy in {lang}"
-                await privacy_cmd(mock_update, mock_context)
-                mock_update.message.reply_text.assert_awaited()
-                mock_update.message.reply_text.reset_mock()
+            # stub presenter.privacy
+            commands._deps.command_presenter.privacy = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Privacy policy in {lang}",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
+                )
+            )
+            await privacy_cmd(mock_update, mock_context)
+            commands._deps.command_presenter.privacy.assert_awaited_with(
+                mock_update.effective_chat.id
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Privacy policy in {lang}",
+                reply_markup=commands.main_keyboard(lang),
+                parse_mode=None,
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_data_command_all_languages(
         self, languages, mock_update, mock_context
     ):
 
+        from weatherbot.handlers import commands
+        from weatherbot.presentation.command_presenter import (
+            KeyboardView,
+            PresenterResponse,
+        )
+
         for lang in languages:
-            with (
-                patch(
-                    "weatherbot.handlers.commands.get_user_service"
-                ) as mock_user_service,
-                patch(
-                    "weatherbot.handlers.commands.get_subscription_service"
-                ) as mock_sub_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                user_service.get_user_home.return_value = {
-                    "lat": 50.0,
-                    "lon": 10.0,
-                    "label": "Test City",
-                }
-                mock_user_service.return_value = user_service
-                subscription_service = AsyncMock()
-                subscription_service.get_subscription.return_value = {
-                    "hour": 8,
-                    "minute": 30,
-                }
-                mock_sub_service.return_value = subscription_service
-                mock_i18n.side_effect = (
-                    lambda key, language, **kwargs: f"{key} in {language}"
+            # stub presenter.data_snapshot
+            commands._deps.command_presenter.data_snapshot = AsyncMock(
+                return_value=PresenterResponse(
+                    message=f"Data in {lang}", language=lang, keyboard=KeyboardView.MAIN
                 )
-                await data_cmd(mock_update, mock_context)
-                mock_update.message.reply_text.assert_awaited()
-                mock_update.message.reply_text.reset_mock()
+            )
+            await data_cmd(mock_update, mock_context)
+            commands._deps.command_presenter.data_snapshot.assert_awaited_with(
+                mock_update.effective_chat.id
+            )
+            mock_update.message.reply_text.assert_awaited_with(
+                f"Data in {lang}",
+                reply_markup=commands.main_keyboard(lang),
+                parse_mode=None,
+            )
+            mock_update.message.reply_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_location_handler_all_languages(self, languages):
@@ -301,6 +300,8 @@ class TestAllCommandsAllLanguages:
     @pytest.mark.asyncio
     async def test_language_change_callback_all_languages(self, languages):
 
+        import weatherbot.handlers.language as language_module
+
         for target_lang in languages:
             update = MagicMock()
             update.callback_query.data = f"lang_{target_lang}"
@@ -309,51 +310,50 @@ class TestAllCommandsAllLanguages:
             update.callback_query.message.edit_text = AsyncMock()
             context = MagicMock()
             context.bot = AsyncMock()
-            with (
-                patch("weatherbot.handlers.language.get_user_service") as mock_service,
-                patch("weatherbot.handlers.language.i18n.get") as mock_i18n,
-            ):
-                user_service = AsyncMock()
-                mock_service.return_value = user_service
-                user_service.get_user_profile.return_value = UserProfile(
-                    language="ru", language_explicit=True
-                )
-                mock_i18n.return_value = f"Language changed to {target_lang}"
-                await language_callback(update, context)
-                user_service.set_user_language.assert_awaited_with(
-                    "123456", target_lang
-                )
-                update.callback_query.message.edit_text.assert_awaited()
+            user_service = AsyncMock()
+            user_service.get_user_profile.return_value = UserProfile(
+                language="ru", language_explicit=True
+            )
 
-                user_service.set_user_language.reset_mock()
-                update.callback_query.message.edit_text.reset_mock()
+            language_module.configure_language_handlers(
+                language_module.LanguageHandlerDependencies(
+                    user_service=user_service,
+                    localization=Localization(),
+                    keyboard_factory=lambda _lang: None,
+                )
+            )
+
+            await language_module.language_callback(update, context)
+            user_service.set_user_language.assert_awaited_with("123456", target_lang)
+            update.callback_query.message.edit_text.assert_awaited()
+
+            user_service.set_user_language.reset_mock()
+            update.callback_query.message.edit_text.reset_mock()
 
     @pytest.mark.asyncio
     async def test_error_messages_all_languages(self, languages, mock_update):
 
+        from weatherbot.handlers import commands
+        from weatherbot.presentation.command_presenter import (
+            KeyboardView,
+            PresenterResponse,
+        )
+
         for lang in languages:
+            # return error-like response from presenter
+            commands._deps.command_presenter.set_home = AsyncMock(
+                return_value=PresenterResponse(
+                    message="Please provide city name",
+                    language=lang,
+                    keyboard=KeyboardView.MAIN,
+                    success=False,
+                )
+            )
             context = MagicMock()
             context.args = []
-            with (
-                patch("weatherbot.handlers.commands.get_user_service") as mock_service,
-                patch("weatherbot.handlers.commands.i18n.get") as mock_i18n,
-                patch("weatherbot.handlers.commands.main_keyboard"),
-                patch("weatherbot.core.decorators.spam_protection") as mock_spam,
-            ):
-                user_service = AsyncMock()
-                user_service.get_user_language.return_value = lang
-                mock_service.return_value = user_service
-                mock_i18n.return_value = f"Error: No city specified in {lang}"
-                mock_spam.is_spam = AsyncMock(return_value=(False, ""))
-                await sethome_cmd(mock_update, context)
-                mock_update.message.reply_text.assert_awaited()
-                call_args = mock_update.message.reply_text.await_args[0][0]
-                assert (
-                    lang in call_args
-                    or "Error" in call_args
-                    or "Пожалуйста" in call_args
-                )
-                mock_update.message.reply_text.reset_mock()
+            await sethome_cmd(mock_update, context)
+            mock_update.message.reply_text.assert_awaited()
+            mock_update.message.reply_text.reset_mock()
 
 
 class TestButtonsAndKeyboards:

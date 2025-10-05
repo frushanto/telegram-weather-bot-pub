@@ -25,71 +25,61 @@ async def test_sethome_home_unsethome_flow():
 
     context.args = []
 
-    with (
-        patch("weatherbot.handlers.commands.get_user_service") as mock_user_svc,
-        patch(
-            "weatherbot.handlers.commands.get_weather_application_service"
-        ) as mock_weather_svc,
-        patch(
-            "weatherbot.handlers.commands.format_weather", return_value="WEATHER_MSG"
-        ),
-        patch(
-            "weatherbot.handlers.commands.notify_quota_if_needed",
-            new_callable=AsyncMock,
-        ),
-    ):
-        user_service = AsyncMock()
-        user_service.get_user_language.return_value = "ru"
-        user_service.set_user_home = AsyncMock()
-        user_service.get_user_home.return_value = UserHome(
-            lat=10, lon=20, label="TestCity"
+    from weatherbot.handlers import commands
+    from weatherbot.presentation.command_presenter import (
+        KeyboardView,
+        PresenterResponse,
+    )
+
+    # stub presenter.set_home for prompt and success flow
+    commands._deps.command_presenter.set_home = AsyncMock(
+        return_value=PresenterResponse(
+            message="Prompt for city", language="ru", keyboard=KeyboardView.MAIN
         )
-        mock_user_svc.return_value = user_service
+    )
 
-        weather_service = AsyncMock()
-        weather_service.geocode_city.return_value = (10, 20, "TestCity")
-        weather_service.get_weather_by_coordinates.return_value = WeatherReport(
-            current=WeatherCurrent(
-                temperature=15.0,
-                apparent_temperature=14.0,
-                wind_speed=3.0,
-                weather_code=0,
-            ),
-            daily=[
-                WeatherDaily(
-                    min_temperature=10.0,
-                    max_temperature=20.0,
-                    precipitation_probability=5.0,
-                    sunrise="2025-01-01T07:00",
-                    sunset="2025-01-01T19:00",
-                    wind_speed_max=4.0,
-                    weather_code=1,
-                )
-            ],
+    # prompt flow
+    await sethome_cmd.__wrapped__(update, context)
+    update.message.reply_text.assert_awaited()
+    update.message.reply_text.reset_mock()
+
+    # success flow
+    commands._deps.command_presenter.set_home = AsyncMock(
+        return_value=PresenterResponse(
+            message="Home set successfully", language="ru", keyboard=KeyboardView.MAIN
         )
-        mock_weather_svc.return_value = weather_service
+    )
+    context.args = ["TestCity"]
+    await sethome_cmd.__wrapped__(update, context)
+    commands._deps.command_presenter.set_home.assert_awaited_with(123, "TestCity")
+    update.message.reply_text.assert_awaited()
+    update.message.reply_text.reset_mock()
 
-        await sethome_cmd.__wrapped__(update, context)
-        update.message.reply_text.assert_awaited()
-        update.message.reply_text.reset_mock()
-
-        context.args = ["TestCity"]
-        await sethome_cmd.__wrapped__(update, context)
-        user_service.set_user_home.assert_awaited_once_with(
-            str(123), 10, 20, "TestCity"
+    # home flow
+    commands._deps.command_presenter.home_weather = AsyncMock(
+        return_value=PresenterResponse(
+            message="HOME_MSG",
+            language="ru",
+            keyboard=KeyboardView.MAIN,
+            parse_mode="HTML",
         )
-        update.message.reply_text.assert_awaited()
-        update.message.reply_text.reset_mock()
+    )
+    await home_cmd.__wrapped__(update, context)
+    commands._deps.command_presenter.home_weather.assert_awaited_with(123)
+    update.message.reply_text.assert_awaited_once_with(
+        "HOME_MSG", parse_mode="HTML", reply_markup=main_keyboard("ru")
+    )
+    update.message.reply_text.reset_mock()
 
-        await home_cmd.__wrapped__(update, context)
-        update.message.reply_text.assert_awaited_once_with(
-            "WEATHER_MSG", parse_mode="HTML", reply_markup=main_keyboard("ru")
+    # unset flow
+    commands._deps.command_presenter.unset_home = AsyncMock(
+        return_value=PresenterResponse(
+            message="Unset OK", language="ru", keyboard=KeyboardView.MAIN
         )
-        update.message.reply_text.reset_mock()
-
-        user_service.remove_user_home.return_value = True
-        await unsethome_cmd.__wrapped__(update, context)
-        update.message.reply_text.assert_awaited()
+    )
+    await unsethome_cmd.__wrapped__(update, context)
+    commands._deps.command_presenter.unset_home.assert_awaited_with(123)
+    update.message.reply_text.assert_awaited()
 
 
 @pytest.mark.asyncio
@@ -99,29 +89,44 @@ async def test_subscribe_unsubscribe_flow():
     update.message.reply_text = AsyncMock()
     context = MagicMock(spec=ContextTypes.DEFAULT_TYPE)
 
+    from weatherbot.handlers import commands
+    from weatherbot.presentation.command_presenter import (
+        KeyboardView,
+        PresenterResponse,
+    )
+
+    # prompt flow (no args)
     context.args = []
-    with (
-        patch("weatherbot.handlers.commands.get_user_service") as mock_user_svc,
-        patch("weatherbot.handlers.commands.get_subscription_service") as mock_sub_svc,
-    ):
-        user_service = AsyncMock()
-        user_service.get_user_language.return_value = "en"
-        mock_user_svc.return_value = user_service
+    commands._deps.subscription_presenter.prompt_for_time = AsyncMock(
+        return_value=PresenterResponse(
+            message="Please send time", language="en", keyboard=KeyboardView.MAIN
+        )
+    )
+    await subscribe_cmd.__wrapped__(update, context)
+    commands._deps.subscription_presenter.prompt_for_time.assert_awaited_with(456)
+    update.message.reply_text.assert_awaited()
+    update.message.reply_text.reset_mock()
 
-        sub_service = AsyncMock()
-        sub_service.parse_time_string.return_value = (8, 0)
-        sub_service.set_subscription = AsyncMock()
-        mock_sub_svc.return_value = sub_service
+    # subscribe flow with args
+    context.args = ["08:00"]
+    commands._deps.subscription_presenter.subscribe = AsyncMock(
+        return_value=PresenterResponse(
+            message="Subscribed", language="en", keyboard=KeyboardView.MAIN
+        )
+    )
+    await subscribe_cmd.__wrapped__(update, context)
+    commands._deps.subscription_presenter.subscribe.assert_awaited_with(
+        456, "08:00", validate_input=False
+    )
+    update.message.reply_text.assert_awaited()
+    update.message.reply_text.reset_mock()
 
-        await subscribe_cmd.__wrapped__(update, context)
-        update.message.reply_text.assert_awaited()
-        update.message.reply_text.reset_mock()
-
-        context.args = ["08:00"]
-        await subscribe_cmd.__wrapped__(update, context)
-        sub_service.set_subscription.assert_awaited_once_with(str(456), 8, 0)
-        update.message.reply_text.assert_awaited()
-        update.message.reply_text.reset_mock()
-
-        await unsubscribe_cmd.__wrapped__(update, context)
-        update.message.reply_text.assert_awaited()
+    # unsubscribe flow
+    commands._deps.subscription_presenter.unsubscribe = AsyncMock(
+        return_value=PresenterResponse(
+            message="Unsubscribed", language="en", keyboard=KeyboardView.MAIN
+        )
+    )
+    await unsubscribe_cmd.__wrapped__(update, context)
+    commands._deps.subscription_presenter.unsubscribe.assert_awaited_with(456)
+    update.message.reply_text.assert_awaited()

@@ -1,11 +1,13 @@
+import asyncio
 import datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 import pytz
 
 from weatherbot.core.config import BotConfig, reset_config_provider, set_config
-from weatherbot.core.container import container
+from weatherbot.core.container import get_container
 from weatherbot.domain.value_objects import UserHome
 from weatherbot.infrastructure.container import (
     override_user_service,
@@ -16,11 +18,14 @@ from weatherbot.infrastructure.container import (
 )
 from weatherbot.infrastructure.timezone_service import TimezoneService
 from weatherbot.jobs import scheduler
+from weatherbot.presentation.i18n import Localization
 
 
 @pytest.fixture
 def mock_user_service(tmp_path):
+    container = get_container()
     container.clear()
+    container.register_singleton(Localization, Localization())
     config = BotConfig(
         token="test",
         storage_path=str(tmp_path / "storage.json"),
@@ -37,10 +42,24 @@ def mock_user_service(tmp_path):
         provider, overrides=override_user_service(lambda: user_service)
     )
 
+    from weatherbot.jobs.scheduler import SchedulerDependencies, configure_scheduler
+
+    configure_scheduler(
+        SchedulerDependencies(
+            user_service=user_service,
+            weather_service=AsyncMock(),
+            quota_notifier=lambda bot: AsyncMock()(bot),
+            weather_formatter=lambda *args, **kwargs: "",
+            translate=lambda key, lang, **kwargs: key,
+            config_provider=lambda: SimpleNamespace(timezone=pytz.UTC),
+        )
+    )
+
     yield user_service
 
     reset_config_provider()
     container.clear()
+    container.register_singleton(Localization, Localization())
 
 
 class DummyJobQueue:
@@ -56,8 +75,7 @@ class DummyJobQueue:
         )
 
 
-@pytest.mark.asyncio
-async def test_schedule_uses_user_timezone_with_dst(mock_user_service):
+def test_schedule_uses_user_timezone_with_dst(mock_user_service):
     # Simulate a user living in 'Europe/Berlin' (which has DST)
     job_queue = DummyJobQueue()
     chat_id = 12345
@@ -67,7 +85,7 @@ async def test_schedule_uses_user_timezone_with_dst(mock_user_service):
         lat=0.0, lon=0.0, label="", timezone="Europe/Berlin"
     )
 
-    await scheduler.schedule_daily_timezone_aware(job_queue, chat_id, hour, 0)
+    asyncio.run(scheduler.schedule_daily_timezone_aware(job_queue, chat_id, hour, 0))
 
     assert len(job_queue.runs) == 1
     run = job_queue.runs[0]

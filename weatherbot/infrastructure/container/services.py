@@ -1,16 +1,25 @@
 from typing import Any, Callable, Dict, Optional, Type
 
 from weatherbot.application.admin_service import AdminApplicationService
+from weatherbot.application.interfaces import (
+    AdminApplicationServiceProtocol,
+    SubscriptionServiceProtocol,
+    UserServiceProtocol,
+    WeatherApplicationServiceProtocol,
+    WeatherQuotaManagerProtocol,
+)
 from weatherbot.application.subscription_service import SubscriptionService
 from weatherbot.application.user_service import UserService
 from weatherbot.application.weather_service import WeatherApplicationService
 from weatherbot.core.config import ConfigProvider
-from weatherbot.core.container import container
+from weatherbot.core.container import get_container
 from weatherbot.domain.repositories import UserRepository
-from weatherbot.domain.services import GeocodeService, WeatherService
-from weatherbot.infrastructure.spam_protection import spam_protection
+from weatherbot.domain.services import (
+    GeocodeService,
+    SpamProtectionService,
+    WeatherService,
+)
 from weatherbot.infrastructure.timezone_service import TimezoneService
-from weatherbot.infrastructure.weather_quota import WeatherApiQuotaManager
 from weatherbot.jobs.backup import perform_backup
 
 
@@ -19,6 +28,9 @@ def _register_factory(
     overrides: Optional[Dict[Type[Any], Callable[[], Any]]],
     factory: Callable[[], Any],
 ) -> None:
+
+    container = get_container()
+
     if overrides and interface in overrides:
         override_factory = overrides[interface]
         if not callable(override_factory):
@@ -32,33 +44,36 @@ def register_application_services(
     config_provider: ConfigProvider,
     overrides: Optional[Dict[Type[Any], Callable[[], Any]]] = None,
 ) -> None:
+
+    container = get_container()
+
     _register_factory(
-        UserService,
+        UserServiceProtocol,
         overrides,
         lambda: UserService(
             container.get(UserRepository), container.get(TimezoneService)
         ),
     )
     _register_factory(
-        WeatherApplicationService,
+        WeatherApplicationServiceProtocol,
         overrides,
         lambda: WeatherApplicationService(
             container.get(WeatherService), container.get(GeocodeService)
         ),
     )
     _register_factory(
-        SubscriptionService,
+        SubscriptionServiceProtocol,
         overrides,
         lambda: SubscriptionService(container.get(UserRepository)),
     )
     _register_factory(
-        AdminApplicationService,
+        AdminApplicationServiceProtocol,
         overrides,
         lambda: AdminApplicationService(
-            spam_protection,
-            container.get(SubscriptionService),
-            container.get(WeatherApplicationService),
-            container.get(WeatherApiQuotaManager),
+            container.get(SpamProtectionService),
+            container.get(SubscriptionServiceProtocol),
+            container.get(WeatherApplicationServiceProtocol),
+            container.get(WeatherQuotaManagerProtocol),
             perform_backup,
             config_provider,
         ),

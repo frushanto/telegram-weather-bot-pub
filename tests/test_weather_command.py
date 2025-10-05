@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from weatherbot.domain.conversation import ConversationMode
 from weatherbot.handlers.commands import weather_cmd
 
 
@@ -15,10 +16,8 @@ class TestWeatherCommand:
         update.message.reply_text = AsyncMock()
         context = MagicMock()
 
-        mock_awaiting = {}
         with (
             patch("weatherbot.handlers.commands.get_user_service") as mock_get_service,
-            patch("weatherbot.handlers.messages.awaiting_city_weather", mock_awaiting),
             patch("weatherbot.handlers.commands.i18n") as mock_i18n,
             patch("weatherbot.handlers.commands.main_keyboard") as mock_keyboard,
         ):
@@ -27,10 +26,18 @@ class TestWeatherCommand:
             user_service.get_user_language.return_value = "ru"
             mock_i18n.get.return_value = "Введите название города:"
             mock_keyboard.return_value = "test_keyboard"
+
+            # Get the state store directly instead of patching
+            from weatherbot.infrastructure.setup import get_conversation_state_store
+
+            state_store = get_conversation_state_store()
+            state_store.clear_conversation(123456)
+
             await weather_cmd(update, context)
 
-            assert 123456 in mock_awaiting
-            assert mock_awaiting[123456] is True
+            assert state_store.is_awaiting(
+                123456, ConversationMode.AWAITING_CITY_WEATHER
+            )
 
             update.message.reply_text.assert_called_once_with(
                 "Введите название города:", reply_markup="test_keyboard"
@@ -48,9 +55,6 @@ class TestWeatherCommand:
                 patch(
                     "weatherbot.handlers.commands.get_user_service"
                 ) as mock_get_service,
-                patch(
-                    "weatherbot.handlers.commands.awaiting_city_weather"
-                ) as mock_awaiting,
                 patch("weatherbot.handlers.commands.i18n") as mock_i18n,
                 patch("weatherbot.handlers.commands.main_keyboard") as mock_keyboard,
             ):

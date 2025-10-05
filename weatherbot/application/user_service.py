@@ -1,9 +1,10 @@
 import logging
-from typing import Dict, Optional
+from typing import Optional
 
 from ..core.exceptions import StorageError, ValidationError
 from ..domain.repositories import UserRepository
 from ..domain.value_objects import UserHome, UserProfile
+from .dtos import UserDataDTO
 
 logger = logging.getLogger(__name__)
 
@@ -109,13 +110,11 @@ class UserService:
             logger.exception(f"Error setting language for user {chat_id}")
             raise StorageError(f"Failed to set language: {e}")
 
-    async def get_user_data(self, chat_id: str) -> Dict:
+    async def get_user_data(self, chat_id: str) -> UserDataDTO:
 
         try:
             profile = await self.get_user_profile(chat_id)
-            if profile.is_empty():
-                return {}
-            return profile.to_storage()
+            return UserDataDTO.from_profile(profile)
         except Exception as e:
             logger.exception(f"Error getting user data {chat_id}")
             raise StorageError(f"Failed to get user data: {e}")

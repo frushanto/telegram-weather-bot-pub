@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple, cast
 
 from ..core.exceptions import StorageError, ValidationError
 from ..domain.repositories import UserRepository
@@ -8,6 +8,7 @@ from ..domain.value_objects import (
     UserProfile,
     UserSubscription,
 )
+from .dtos import SubscriptionScheduleDTO, SubscriptionScheduleMap
 
 logger = logging.getLogger(__name__)
 
@@ -122,20 +123,20 @@ class SubscriptionService:
             logger.exception(f"Error retrieving subscription info for {chat_id}")
             return None
 
-    async def get_all_subscriptions_dict(self) -> Dict[str, Dict]:
+    async def get_all_subscriptions_dict(self) -> SubscriptionScheduleMap:
 
         try:
             subscriptions = await self.get_all_subscriptions()
-            result = {}
+            result: SubscriptionScheduleMap = {}
             for entry in subscriptions:
-                result[entry.chat_id] = {
-                    "hour": entry.subscription.hour,
-                    "minute": entry.subscription.minute,
-                }
+                result[entry.chat_id] = SubscriptionScheduleDTO(
+                    hour=entry.subscription.hour,
+                    minute=entry.subscription.minute,
+                )
             return result
         except Exception:
             logger.exception("Error building subscriptions dictionary")
-            return {}
+            return cast(SubscriptionScheduleMap, {})
 
     async def parse_time_string(self, time_str: str) -> Tuple[int, int]:
 

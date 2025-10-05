@@ -2,9 +2,11 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
+from weatherbot.application.dtos import GeocodeResultDTO
+from weatherbot.domain.conversation import ConversationMode
 from weatherbot.handlers.commands import cancel_cmd, sethome_cmd, subscribe_cmd
 from weatherbot.handlers.messages import on_text
-from weatherbot.infrastructure.state import awaiting_sethome, awaiting_subscribe_time
+from weatherbot.infrastructure.setup import get_conversation_state_store
 from weatherbot.presentation.i18n import i18n
 
 
@@ -20,28 +22,54 @@ async def test_sethome_interactive_prompt(monkeypatch):
 
     monkeypatch.setattr(i18n, "get", lambda key, lang, **kwargs: f"PROMPT_{key}")
 
+    state_store = get_conversation_state_store()
+
+    from weatherbot.handlers import commands
+    from weatherbot.presentation.command_presenter import (
+        KeyboardView,
+        PresenterResponse,
+    )
+
+    # stub presenter.set_home to mutate state and return prompt
+    async def fake_set_home(chat_id, city_input=None):
+        store = get_conversation_state_store()
+        store.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
+        return PresenterResponse(
+            message="Choose time for daily weather forecast:",
+            language="ru",
+            keyboard=KeyboardView.MAIN,
+        )
+
+    commands._deps.command_presenter.set_home = AsyncMock(side_effect=fake_set_home)
     await sethome_cmd(update, context)
 
-    assert chat_id in awaiting_sethome
-    update.message.reply_text.assert_awaited_with(
-        "PROMPT_sethome_prompt", reply_markup=ANY
-    )
+    assert state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SETHOME)
+    # The handler may include an explicit parse_mode kw (often None). Tests should
+    # focus on the meaningful parts of the call (text and reply_markup) and not
+    # be brittle about presence of optional kwargs like parse_mode.
+    update.message.reply_text.assert_awaited()
+    args, kwargs = update.message.reply_text.call_args
+    # Since we're using presenter pattern, the message comes from the presenter, not i18n
+    assert args[0] == "Choose time for daily weather forecast:"
+    assert "reply_markup" in kwargs
 
 
 @pytest.mark.asyncio
 async def test_sethome_interactive_flow(monkeypatch):
     from weatherbot.domain.conversation import ConversationMode
-    from weatherbot.infrastructure.state import conversation_manager
+
+    state_store = get_conversation_state_store()
 
     chat_id = 42
-    awaiting_sethome[chat_id] = True
-    conversation_manager.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
+    state_store.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
 
     user_service = MagicMock()
     user_service.get_user_language = AsyncMock(return_value="ru")
     user_service.set_user_home = AsyncMock()
     weather_service = MagicMock()
-    weather_service.geocode_city = AsyncMock(return_value=(10.0, 20.0, "CityLabel"))
+    weather_service.geocode_city = AsyncMock(
+        return_value=GeocodeResultDTO(lat=10.0, lon=20.0, label="CityLabel")
+    )
     monkeypatch.setattr(
         "weatherbot.handlers.messages.get_user_service", lambda: user_service
     )
@@ -60,10 +88,7 @@ async def test_sethome_interactive_flow(monkeypatch):
 
     await on_text(update, context)
 
-    assert chat_id not in awaiting_sethome
-    assert not conversation_manager.is_awaiting(
-        chat_id, ConversationMode.AWAITING_SETHOME
-    )
+    assert not state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SETHOME)
     update.message.reply_text.assert_awaited()
 
     args, _ = update.message.reply_text.call_args
@@ -82,9 +107,28 @@ async def test_subscribe_interactive_prompt(monkeypatch):
 
     monkeypatch.setattr(i18n, "get", lambda key, lang, **kwargs: f"PROMPT_{key}")
 
+    state_store = get_conversation_state_store()
+
+    from weatherbot.handlers import commands
+    from weatherbot.presentation.command_presenter import (
+        KeyboardView,
+        PresenterResponse,
+    )
+    from weatherbot.presentation.subscription_presenter import SubscriptionActionResult
+
+    # stub subscription_presenter.prompt_for_time to set state and return prompt
+    async def fake_prompt(cid):
+        state_store.set_awaiting_mode(cid, ConversationMode.AWAITING_SUBSCRIBE_TIME)
+        return SubscriptionActionResult(
+            message="PROMPT_subscribe_prompt", language="ru", success=True
+        )
+
+    commands._deps.subscription_presenter.prompt_for_time = AsyncMock(
+        side_effect=fake_prompt
+    )
     await subscribe_cmd(update, context)
 
-    assert chat_id in awaiting_subscribe_time
+    assert state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME)
     update.message.reply_text.assert_awaited_with(
         "PROMPT_subscribe_prompt", reply_markup=ANY
     )
@@ -93,19 +137,27 @@ async def test_subscribe_interactive_prompt(monkeypatch):
 @pytest.mark.asyncio
 async def test_subscribe_interactive_flow(monkeypatch):
     from weatherbot.domain.conversation import ConversationMode
-    from weatherbot.infrastructure.state import conversation_manager
+
+    state_store = get_conversation_state_store()
 
     chat_id = 99
-    awaiting_subscribe_time[chat_id] = True
-    conversation_manager.set_awaiting_mode(
-        chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
-    )
+    state_store.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME)
 
-    sub_service = MagicMock()
-    sub_service.parse_time_string = AsyncMock(return_value=(7, 30))
-    sub_service.set_subscription = AsyncMock()
-    monkeypatch.setattr(
-        "weatherbot.handlers.messages.get_subscription_service", lambda: sub_service
+    from weatherbot.handlers import commands
+    from weatherbot.presentation.subscription_presenter import SubscriptionActionResult
+
+    # stub subscription_presenter.subscribe to clear state
+    async def fake_subscribe(
+        chat_id, time_input, clear_state=False, validate_input=True
+    ):
+        store = get_conversation_state_store()
+        store.clear_conversation(chat_id)
+        return SubscriptionActionResult(
+            message=i18n.get("subscribe_success", "en"), language="en", success=True
+        )
+
+    commands._deps.subscription_presenter.subscribe = AsyncMock(
+        side_effect=fake_subscribe
     )
 
     # Mock user service to return home location
@@ -137,8 +189,7 @@ async def test_subscribe_interactive_flow(monkeypatch):
 
     await on_text(update, context)
 
-    assert chat_id not in awaiting_subscribe_time
-    assert not conversation_manager.is_awaiting(
+    assert not state_store.is_awaiting(
         chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME
     )
     update.message.reply_text.assert_awaited()
@@ -149,12 +200,11 @@ async def test_subscribe_interactive_flow(monkeypatch):
 @pytest.mark.asyncio
 async def test_cancel_clears_states(monkeypatch):
     from weatherbot.domain.conversation import ConversationMode
-    from weatherbot.infrastructure.state import conversation_manager
+
+    state_store = get_conversation_state_store()
 
     chat_id = 123
-    awaiting_sethome[chat_id] = True
-    awaiting_subscribe_time[chat_id] = True
-    conversation_manager.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
+    state_store.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
 
     update = MagicMock()
     update.effective_chat.id = chat_id
@@ -166,11 +216,7 @@ async def test_cancel_clears_states(monkeypatch):
 
     await on_text(update, context)
 
-    assert chat_id not in awaiting_sethome
-    assert chat_id not in awaiting_subscribe_time
-    assert not conversation_manager.is_awaiting(
-        chat_id, ConversationMode.AWAITING_SETHOME
-    )
+    assert not state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SETHOME)
     update.message.reply_text.assert_awaited_with(
         "MSG_operation_cancelled", reply_markup=ANY
     )

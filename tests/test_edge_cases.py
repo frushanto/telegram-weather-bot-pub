@@ -83,7 +83,9 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_concurrent_user_requests(self):
 
-        from weatherbot.infrastructure.spam_protection import spam_protection
+        from weatherbot.infrastructure.spam_protection import SpamProtection
+
+        spam_protection = SpamProtection()
 
         async def make_request(user_id: str, message: str):
             return await spam_protection.is_spam(user_id, message, count_request=False)
