@@ -42,7 +42,7 @@ SSH_OPTS ?= -o StrictHostKeyChecking=accept-new
 
 # ---------- 3) Phony targets ----------
 .PHONY: \
-	default venv install run-dev run-prod \
+	help default venv install run-dev run-prod \
 	test coverage coverage-html codecov test-all \
 	lint format-check format \
 	prod-up prod-logs prod-restart prod-down prod-clean \
@@ -54,6 +54,70 @@ SSH_OPTS ?= -o StrictHostKeyChecking=accept-new
 
 # ---------- 4) Default ----------
 default: run-dev
+
+# ---------- Help ----------
+help:
+	@echo "======================================================================="
+	@echo "  Telegram Weather Bot - Makefile Commands"
+	@echo "======================================================================="
+	@echo ""
+	@echo "🔧 DEVELOPMENT:"
+	@echo "  make help              Show this help message"
+	@echo "  make venv              Create virtual environment"
+	@echo "  make install           Install dependencies (prod + dev)"
+	@echo "  make run-dev           Run bot locally with .env.dev"
+	@echo "  make run-prod          Run bot locally with .env.prod"
+	@echo ""
+	@echo "🧪 TESTING:"
+	@echo "  make test              Run tests quickly (pytest -q)"
+	@echo "  make coverage          Run tests with coverage report"
+	@echo "  make coverage-html     Generate HTML coverage report"
+	@echo "  make codecov           Upload coverage to Codecov"
+	@echo "  make test-all          Run coverage + codecov"
+	@echo ""
+	@echo "✨ CODE QUALITY:"
+	@echo "  make lint              Run flake8 linter"
+	@echo "  make format-check      Check code formatting (black + isort)"
+	@echo "  make format            Auto-format code (black + isort)"
+	@echo "  make pre-commit-install Install pre-commit hooks"
+	@echo ""
+	@echo "🐳 DOCKER (Local):"
+	@echo "  make prod-up           Start containers in background (--build)"
+	@echo "  make prod-logs         Show container logs (tail -f)"
+	@echo "  make prod-restart      Restart running containers"
+	@echo "  make prod-down         Stop and remove containers"
+	@echo "  make prod-clean        Stop, remove, and clean up containers"
+	@echo ""
+	@echo "🚀 DEPLOYMENT (Remote via SSH):"
+	@echo "  make deploy            Simple deploy: pull + rebuild + up"
+	@echo "  make deploy-clean      Clean deploy: stop → hard reset → rebuild"
+	@echo "  make deploy-logs       Show logs from remote containers"
+	@echo "  make deploy-prune      Prune unused Docker images on remote"
+	@echo "  make ssh-connect       Connect to remote server via SSH"
+	@echo ""
+	@echo "🚀 DEPLOYMENT (Local on server):"
+	@echo "  make local-deploy      Deploy on current machine (hard reset)"
+	@echo "  make local-logs        Show local container logs"
+	@echo ""
+	@echo "🧹 CLEANUP:"
+	@echo "  make clean             Remove __pycache__ and *.pyc files"
+	@echo "  make clean-venv        Remove virtual environment"
+	@echo "  make freeze            Create requirements.lock from venv"
+	@echo ""
+	@echo "💾 BACKUP:"
+	@echo "  make backup-now        Manually trigger storage backup"
+	@echo ""
+	@echo "🔐 CI/CD:"
+	@echo "  make ci-test           Run all CI tests (format + lint + tests)"
+	@echo "  make ci-security       Run security scan (bandit)"
+	@echo "  make ci-all            Run all CI checks"
+	@echo ""
+	@echo "📝 CONFIGURATION:"
+	@echo "  - For remote deploy: Create .env.deploy with SSH_HOST, PROJECT_DIR, BRANCH"
+	@echo "  - For local dev: Create .env.dev with BOT_TOKEN and other vars"
+	@echo "  - For production: Create .env.prod with production credentials"
+	@echo ""
+	@echo "======================================================================="
 
 # ---------- 5) Virtual environment ----------
 venv:

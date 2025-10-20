@@ -43,7 +43,7 @@ asyncio_default_fixture_loop_scope = "function"
 # Packaging / interpreter constraints
 [project]
 name = "telegram-weather-bot-pub"
-version = "3.1.0"
+version = "3.1.1"
 description = "Asynchronous multi-language Telegram weather bot"
 readme = "README.md"
 license = { text = "MIT" }

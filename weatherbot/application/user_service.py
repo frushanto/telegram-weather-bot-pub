@@ -1,6 +1,7 @@
 import logging
 from typing import Optional
 
+from ..core.events import EventBus, UserLanguageChanged
 from ..core.exceptions import StorageError, ValidationError
 from ..domain.repositories import UserRepository
 from ..domain.value_objects import UserHome, UserProfile
@@ -11,9 +12,15 @@ logger = logging.getLogger(__name__)
 
 class UserService:
 
-    def __init__(self, user_repository: UserRepository, timezone_service=None):
+    def __init__(
+        self,
+        user_repository: UserRepository,
+        timezone_service=None,
+        event_bus: Optional[EventBus] = None,
+    ):
         self._user_repo = user_repository
         self._timezone_service = timezone_service
+        self._event_bus = event_bus
 
     async def get_user_home(self, chat_id: str) -> Optional[UserHome]:
 
@@ -104,6 +111,12 @@ class UserService:
             profile.language_explicit = True
             await self._user_repo.save_user_data(str(chat_id), profile.to_storage())
             logger.info(f"Language {language} set for user {chat_id}")
+
+            # Publish event for language change
+            if self._event_bus:
+                event = UserLanguageChanged(chat_id=int(chat_id), lang=language)
+                await self._event_bus.publish(event)
+                logger.debug(f"Published UserLanguageChanged event for chat {chat_id}")
         except ValidationError:
             raise
         except Exception as e:

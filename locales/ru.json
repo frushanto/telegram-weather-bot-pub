@@ -140,7 +140,7 @@
   "admin_version_version": "Версия",
   "admin_version_date": "Дата релиза",
   "admin_version_languages": "Языки",
-  "admin_version_whats_new": "Что нового в версии 3.1.0",
+  "admin_version_whats_new": "Что нового в версии 3.1.1",
   "admin_version_tech_info": "Техническая информация",
   "admin_version_error": "Ошибка при получении информации о версии.",
   "admin_backup_desc": "сделать резервную копию прямо сейчас",
@@ -164,5 +164,8 @@
   "admin_test_weather_usage": "Использование: /admin_test_weather <город>",
   "admin_test_weather_prefix": "Тестовая погода для {city}",
   "admin_test_weather_not_found": "Город '{city}' не найден.",
-  "admin_test_weather_error": "Не удалось получить данные о погоде."
+  "admin_test_weather_error": "Не удалось получить данные о погоде.",
+  "cmd_start_desc": "Запустить бота",
+  "cmd_weather_desc": "Погода",
+  "cmd_help_desc": "Помощь"
 }

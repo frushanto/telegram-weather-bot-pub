@@ -1,7 +1,7 @@
 # Telegram Weather Bot
 
 [![CI/CD Pipeline](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml/badge.svg)](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.1.0-blue.svg)](weatherbot/__version__.py)
+[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](weatherbot/__version__.py)
 [![Python](https://img.shields.io/badge/python-3.12-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
@@ -148,6 +148,16 @@ Switch between supported languages anytime:
 - 🇩🇪 German (de)
 
 Use the 🌐 Language button or `/language` command to change.
+
+### Multilingual Commands (Per-Chat Scopes)
+
+The bot automatically updates command descriptions in your chat's language:
+
+1. **On First Start**: When you run `/start`, the bot sets command descriptions in your preferred language
+2. **On Language Change**: When you change language via `/language`, commands update automatically
+3. **Per-Chat Customization**: Each chat gets its own localized command menu (using Telegram's per-chat command scopes)
+
+**Note**: Due to Telegram client caching, newly updated commands may not appear immediately. If commands don't update, try closing and reopening the bot menu.
 
 ## 🏗️ Architecture
 
@@ -369,13 +379,15 @@ python app.py
 
 See `weatherbot/__version__.RELEASE_NOTES` for detailed version history and updates.
 
-## 🆕 What's New — Version 3.1.0
+## 🆕 What's New — Version 3.1.1
 
 ### ✨ Release Highlights
-- **✅ Consistent Metadata**: All version references (badge, packaging, admin UI strings) now point to v3.1.0
-- **📝 Documentation Refresh**: Updated README and release notes to make the upgrade path obvious for operators
-- **🧭 Container Guidance**: Added inline comments/docstrings that explain how dependency wiring and instrumentation works
-- **🧹 Repository Cleanup**: Removed an outdated coverage artefact to keep the tree ready for packaging
+- **✨ Multilingual Command Menus**: Automatic per-chat command localization using Telegram's `setMyCommands` API
+- **✨ Event-Driven Language Updates**: Commands automatically refresh when users change language via `UserLanguageChanged` event
+- **🏗️ Clean Architecture**: Command menu management isolated in presentation layer with event-driven updates
+- **🌍 Full i18n Support**: Command descriptions in English, Russian, and German
+- **📝 LRU Caching**: Efficient command menu caching to reduce Telegram API calls
+- **🧪 Full Test Coverage**: 14 new tests for command menu functionality (total 256 tests passing)
 
 For full release notes see `weatherbot.__version__.RELEASE_NOTES` or the project's changelog when available.
 

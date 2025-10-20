@@ -4,7 +4,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable
 
-from telegram import Update
+from telegram import Bot, Update
 from telegram.ext import ContextTypes
 
 from weatherbot import __release_date__, __supported_languages__, __version__
@@ -13,6 +13,10 @@ from weatherbot.core.config import BotConfig
 from weatherbot.core.decorators import admin_only
 from weatherbot.handlers.command_types import CommandArgs, normalize_command_args
 from weatherbot.presentation.i18n import Localization
+from weatherbot.presentation.telegram.command_menu import (
+    set_commands_for_chat,
+    set_commands_global,
+)
 from weatherbot.utils.time import format_reset_time
 
 logger = logging.getLogger(__name__)
@@ -23,6 +27,7 @@ class AdminHandlerDependencies:
     admin_service: AdminApplicationServiceProtocol
     localization: Localization
     config_provider: Callable[[], BotConfig]
+    bot: Bot
 
 
 _deps: AdminHandlerDependencies | None = None
@@ -416,6 +421,50 @@ async def _admin_version_cmd(
         )
 
 
+async def _refresh_commands_cmd(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Refresh command menu for the current chat or globally."""
+    localization = _localization()
+    admin_lang = _config().admin_language
+    bot = _require_deps().bot
+    chat_id = update.effective_chat.id
+
+    try:
+        args = normalize_command_args(context.args)
+
+        # Check for --global flag
+        if args and args[0] == "--global":
+            lang = args[1] if len(args) > 1 else "en"
+            if lang not in ["en", "de", "ru"]:
+                await update.message.reply_text(
+                    f"❌ Invalid language: {lang}. Use: en, de, or ru"
+                )
+                return
+
+            await set_commands_global(bot, lang, localization)
+            logger.info(f"Admin set global commands for language '{lang}'")
+        else:
+            # Refresh for current chat
+            # Try to get user's language, fall back to admin language
+            from weatherbot.infrastructure.setup import get_user_service
+
+            try:
+                user_service = get_user_service()
+                lang = await user_service.get_user_language(str(chat_id))
+            except Exception:
+                lang = admin_lang
+
+            await set_commands_for_chat(bot, chat_id, lang, localization)
+            logger.info(
+                f"Admin refreshed commands for chat {chat_id} in language '{lang}'"
+            )
+
+    except Exception as e:
+        logger.exception(f"Error in /refresh_commands: {e}")
+        await update.message.reply_text(f"❌ Error: {e}")
+
+
 admin_stats_cmd = _admin_stats_cmd
 admin_unblock_cmd = _admin_unblock_cmd
 admin_user_info_cmd = _admin_user_info_cmd
@@ -427,6 +476,7 @@ admin_test_weather_cmd = _admin_test_weather_cmd
 admin_quota_cmd = _admin_quota_cmd
 admin_help_cmd = _admin_help_cmd
 admin_version_cmd = _admin_version_cmd
+refresh_commands_cmd = _refresh_commands_cmd
 
 _BASE_HANDLERS.update(
     {
@@ -441,5 +491,6 @@ _BASE_HANDLERS.update(
         "admin_quota_cmd": _admin_quota_cmd,
         "admin_help_cmd": _admin_help_cmd,
         "admin_version_cmd": _admin_version_cmd,
+        "refresh_commands_cmd": _refresh_commands_cmd,
     }
 )

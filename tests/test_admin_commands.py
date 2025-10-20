@@ -40,6 +40,7 @@ def admin_handlers(monkeypatch):
 
     service = AsyncMock()
     localization = Localization()
+    mock_bot = AsyncMock()
     config = SimpleNamespace(
         admin_ids={1}, admin_language="ru", timezone=pytz.timezone("UTC")
     )
@@ -49,6 +50,7 @@ def admin_handlers(monkeypatch):
             admin_service=service,
             localization=localization,
             config_provider=lambda: config,
+            bot=mock_bot,
         )
     )
 
@@ -286,6 +288,7 @@ async def test_admin_quota_functionality(admin_handlers, monkeypatch):
     )
     service.get_quota_status.return_value = status
 
+    mock_bot = AsyncMock()
     config_stub = SimpleNamespace(
         admin_ids={1}, admin_language="ru", timezone=timezone.utc
     )
@@ -294,6 +297,7 @@ async def test_admin_quota_functionality(admin_handlers, monkeypatch):
             admin_service=service,
             localization=Localization(),
             config_provider=lambda: config_stub,
+            bot=mock_bot,
         )
     )
 

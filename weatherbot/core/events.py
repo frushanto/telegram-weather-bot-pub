@@ -22,6 +22,7 @@ __all__ = [
     "EventHandler",
     "Mediator",
     "Request",
+    "UserLanguageChanged",
 ]
 
 
@@ -43,6 +44,14 @@ class Event:
         """Return the canonical name of the event."""
 
         return type(self).__name__
+
+
+@dataclass(frozen=True)
+class UserLanguageChanged(Event):
+    """Event fired when a user changes their language preference."""
+
+    chat_id: int
+    lang: str
 
 
 class EventBus:

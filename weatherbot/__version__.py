@@ -1,18 +1,27 @@
-__version__ = "3.1.0"
-__version_info__ = (3, 1, 0)
-__release_date__ = "02.10.2025"
+__version__ = "3.1.1"
+__version_info__ = (3, 1, 1)
+__release_date__ = "20.10.2025"
 __supported_languages__ = "Русский, English, Deutsch"
 
 RELEASE_NOTES = """
+🎉 New in 3.1.1
+---------------
+- ✨ Multilingual command menus: Automatic per-chat command localization using Telegram's setMyCommands API
+- ✨ Event-driven language updates: Commands automatically refresh when users change language via UserLanguageChanged event
+- ✅ Clean Architecture: Command menu management isolated in presentation layer with event-driven updates
+- 🌍 Full i18n support: Command descriptions in English, Russian, and German
+- 📝 LRU caching: Efficient command menu caching to reduce API calls
+- 🧪 Full test coverage: 14 new tests for command menu functionality (total 256 tests passing)
+
+Previous Releases
+==================
+
 🎉 New in 3.1.0
 ---------------
 - ✅ Release metadata aligned across packaging, documentation, and localization
 - ✅ Documentation refreshed with concise 3.1.0 highlights for operators and admins
 - ✅ Dependency container bootstrap clarified with maintainer-facing guidance
 - ✅ Repository hygiene improvements by dropping outdated coverage artefacts
-
-Previous Releases
-==================
 
 🎉 New in 3.0.0
 ---------------

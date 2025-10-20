@@ -13,6 +13,7 @@ from weatherbot.application.user_service import UserService
 from weatherbot.application.weather_service import WeatherApplicationService
 from weatherbot.core.config import ConfigProvider
 from weatherbot.core.container import get_container
+from weatherbot.core.events import EventBus
 from weatherbot.domain.repositories import UserRepository
 from weatherbot.domain.services import (
     GeocodeService,
@@ -51,7 +52,9 @@ def register_application_services(
         UserServiceProtocol,
         overrides,
         lambda: UserService(
-            container.get(UserRepository), container.get(TimezoneService)
+            container.get(UserRepository),
+            container.get(TimezoneService),
+            container.get(EventBus),
         ),
     )
     _register_factory(

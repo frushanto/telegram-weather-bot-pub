@@ -154,6 +154,9 @@ class TestMultiLanguageSupport:
 
         for lang, locale in load_locales.items():
             for key, value in locale.items():
+                # Skip nested dictionary structures (like "commands")
+                if isinstance(value, dict):
+                    continue
 
                 assert value.strip(), f"Пустое значение для ключа {key} в языке {lang}"
 

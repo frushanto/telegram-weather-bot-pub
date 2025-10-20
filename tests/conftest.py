@@ -103,6 +103,12 @@ def configure_default_handler_dependencies():
     quota_notifier = AsyncMock()
     schedule_mock = AsyncMock()
 
+    # Mock bot and localization for new dependencies
+    mock_bot = AsyncMock()
+    from weatherbot.presentation.i18n import Localization
+
+    localization = Localization()
+
     async def quota(bot):
         await quota_notifier(bot)
 
@@ -117,6 +123,8 @@ def configure_default_handler_dependencies():
             state_store=store,
             quota_notifier=quota,
             schedule_subscription=schedule,
+            bot=mock_bot,
+            localization=localization,
         )
     )
     configure_message_handlers(

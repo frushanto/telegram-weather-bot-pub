@@ -140,7 +140,7 @@
   "admin_version_version": "Version",
   "admin_version_date": "Veröffentlichungsdatum",
   "admin_version_languages": "Sprachen",
-  "admin_version_whats_new": "Neuerungen in Version 3.1.0",
+  "admin_version_whats_new": "Neuerungen in Version 3.1.1",
   "admin_version_tech_info": "Technische Informationen",
   "admin_version_error": "Fehler beim Abrufen der Versionsinformationen.",
   "admin_backup_desc": "sofortiges Backup durchführen",
@@ -164,5 +164,8 @@
   "admin_test_weather_usage": "Verwendung: /admin_test_weather <Stadt>",
   "admin_test_weather_prefix": "Testwetter für {city}",
   "admin_test_weather_not_found": "Stadt '{city}' wurde nicht gefunden.",
-  "admin_test_weather_error": "Wetterdaten konnten nicht abgerufen werden."
+  "admin_test_weather_error": "Wetterdaten konnten nicht abgerufen werden.",
+  "cmd_start_desc": "Bot starten",
+  "cmd_weather_desc": "Wetter abrufen",
+  "cmd_help_desc": "Hilfe anzeigen"
 }

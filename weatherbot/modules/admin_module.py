@@ -32,6 +32,7 @@ class AdminModule(Module):
                 admin_service=container.get(AdminApplicationServiceProtocol),
                 localization=container.get(Localization),
                 config_provider=lambda: config,
+                bot=context.application.bot,
             )
         )
 
@@ -52,6 +53,7 @@ class AdminModule(Module):
                 "admin_quota": admin_commands.admin_quota_cmd,
                 "admin_help": admin_commands.admin_help_cmd,
                 "admin_version": admin_commands.admin_version_cmd,
+                "refresh_commands": admin_commands.refresh_commands_cmd,
             }
 
         mediator.register(GetAdminCommandMap, _resolve)

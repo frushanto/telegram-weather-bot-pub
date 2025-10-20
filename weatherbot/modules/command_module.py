@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 from dataclasses import dataclass
 from typing import Awaitable, Callable
@@ -18,6 +19,7 @@ from ..application.interfaces import (
     WeatherQuotaManagerProtocol,
 )
 from ..core.config import ConfigProvider
+from ..core.events import UserLanguageChanged
 from ..handlers import commands as user_commands
 from ..handlers.commands import CommandHandlerDependencies, configure_command_handlers
 from ..handlers.language import (
@@ -44,6 +46,8 @@ from ..presentation.keyboards import main_keyboard
 from ..presentation.subscription_presenter import SubscriptionPresenter
 from .base import Module, ModuleContext
 from .events import CommandCompleted, CommandFailed, CommandInvoked
+
+logger = logging.getLogger(__name__)
 
 HandlerFunc = Callable[..., Awaitable[object] | object]
 
@@ -108,6 +112,8 @@ class CommandModule(Module):
                 state_store=state_store,
                 quota_notifier=quota_notifier,
                 schedule_subscription=schedule_daily_timezone_aware,
+                bot=application.bot,
+                localization=localization,
             )
         )
         configure_message_handlers(
@@ -192,3 +198,22 @@ class CommandModule(Module):
         application.add_handler(
             CallbackQueryHandler(language_callback, pattern="^lang_")
         )
+
+        # Subscribe to language change events to update command menu
+        from ..presentation.telegram.command_menu import set_commands_for_chat
+
+        async def _on_language_changed(evt: UserLanguageChanged) -> None:
+            """Update command menu when user changes their language."""
+            try:
+                await set_commands_for_chat(
+                    application.bot, evt.chat_id, evt.lang, localization
+                )
+                logger.info(
+                    f"Command menu updated for chat {evt.chat_id} to language '{evt.lang}'"
+                )
+            except Exception as e:
+                logger.exception(
+                    f"Failed to update command menu for chat {evt.chat_id}: {e}"
+                )
+
+        event_bus.subscribe(UserLanguageChanged, _on_language_changed)

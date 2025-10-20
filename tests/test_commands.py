@@ -32,6 +32,8 @@ from weatherbot.presentation.subscription_presenter import (
 
 @pytest.fixture(autouse=True)
 def command_handler_dependencies():
+    from weatherbot.presentation.i18n import Localization
+
     store = get_conversation_state_store()
     presenter = SimpleNamespace(
         start=AsyncMock(),
@@ -53,6 +55,8 @@ def command_handler_dependencies():
     user_service.get_user_language.return_value = "ru"
     quota_notifier = AsyncMock()
     schedule_mock = AsyncMock()
+    mock_bot = AsyncMock()
+    localization = Localization()
 
     async def quota(bot):
         await quota_notifier(bot)
@@ -68,6 +72,8 @@ def command_handler_dependencies():
             state_store=store,
             quota_notifier=quota,
             schedule_subscription=schedule,
+            bot=mock_bot,
+            localization=localization,
         )
     )
 
@@ -78,6 +84,8 @@ def command_handler_dependencies():
         quota_notifier=quota_notifier,
         schedule_subscription=schedule_mock,
         state_store=store,
+        bot=mock_bot,
+        localization=localization,
     )
 
 

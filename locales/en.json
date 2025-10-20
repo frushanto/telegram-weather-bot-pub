@@ -140,7 +140,7 @@
   "admin_version_version": "Version",
   "admin_version_date": "Release date",
   "admin_version_languages": "Languages",
-  "admin_version_whats_new": "What's new in version 3.1.0",
+  "admin_version_whats_new": "What's new in version 3.1.1",
   "admin_version_tech_info": "Technical information",
   "admin_version_error": "Error retrieving version information.",
   "admin_backup_desc": "run storage backup immediately",
@@ -164,5 +164,8 @@
   "admin_test_weather_usage": "Usage: /admin_test_weather <city>",
   "admin_test_weather_prefix": "Test weather for {city}",
   "admin_test_weather_not_found": "City '{city}' not found.",
-  "admin_test_weather_error": "Failed to fetch weather data."
+  "admin_test_weather_error": "Failed to fetch weather data.",
+  "cmd_start_desc": "Start the bot",
+  "cmd_weather_desc": "Get current weather",
+  "cmd_help_desc": "Show help"
 }

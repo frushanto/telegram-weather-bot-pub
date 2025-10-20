@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
-from telegram import Update
+from telegram import Bot, Update
 from telegram.ext import ContextTypes
 
 from weatherbot.application.interfaces import (
@@ -18,9 +18,10 @@ from weatherbot.presentation.command_presenter import (
     KeyboardView,
     PresenterResponse,
 )
-from weatherbot.presentation.i18n import i18n
+from weatherbot.presentation.i18n import Localization, i18n
 from weatherbot.presentation.keyboards import language_keyboard, main_keyboard
 from weatherbot.presentation.subscription_presenter import SubscriptionPresenter
+from weatherbot.presentation.telegram.command_menu import set_commands_for_chat
 from weatherbot.presentation.validation import (
     SubscribeTimeModel,
     validate_payload,
@@ -41,6 +42,8 @@ class CommandHandlerDependencies:
     state_store: ConversationStateStoreProtocol
     quota_notifier: QuotaNotifier
     schedule_subscription: ScheduleSubscription
+    bot: Bot
+    localization: Localization
 
 
 _deps: CommandHandlerDependencies | None = None
@@ -103,6 +106,16 @@ async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             reply_markup=__keyboard_from_response(result),
             parse_mode=result.parse_mode,
         )
+
+        # Update command menu for this chat with the user's language
+        deps = _require_deps()
+        user_lang = result.language or "ru"
+        try:
+            await set_commands_for_chat(deps.bot, chat_id, user_lang, deps.localization)
+            logger.debug(f"Commands set for chat {chat_id} in language '{user_lang}'")
+        except Exception as e:
+            logger.warning(f"Failed to set commands for chat {chat_id}: {e}")
+
     except Exception:
         logger.exception("Error in /start command")
         user_lang = (
