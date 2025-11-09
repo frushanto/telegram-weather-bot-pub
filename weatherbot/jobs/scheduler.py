@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import time as dtime
@@ -28,7 +29,7 @@ def _job_name(chat_id: int) -> str:
 
 QuotaNotifier = Callable[[object], Awaitable[None]]
 WeatherFormatter = Callable[..., str]
-Translator = Callable[[str, str], str]
+Translator = Callable[..., str]
 ConfigProvider = Callable[[], BotConfig]
 
 
@@ -132,7 +133,13 @@ def schedule_daily(job_queue, chat_id: int, hour: int, minute: int = 0):
 
 async def send_home_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
 
-    chat_id = context.job.chat_id
+    # Job context should always provide a chat_id; fallback to 0 if missing (defensive)
+    chat_id = getattr(getattr(context, "job", None), "chat_id", None)
+    if chat_id is None:
+        logger.error(
+            "Scheduled job invoked without chat_id; aborting send_home_weather"
+        )
+        return
     home = None
     deps = _require_deps()
     try:
@@ -149,9 +156,49 @@ async def send_home_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
 
         user_lang = await user_service.get_user_language(str(chat_id)) or "ru"
 
-        weather_data = await weather_service.get_weather_by_coordinates(
-            home.lat, home.lon
-        )
+        # Retry loop for transient weather service failures
+        config = deps.config_provider()
+        attempts = max(1, config.schedule_weather_retry_attempts)
+        delay = max(0, config.schedule_weather_retry_delay_sec)
+        weather_data = None
+        for attempt in range(1, attempts + 1):
+            try:
+                weather_data = await weather_service.get_weather_by_coordinates(
+                    home.lat, home.lon
+                )
+                break
+            except WeatherServiceError as exc:
+                if attempt < attempts:
+                    logger.warning(
+                        f"Weather service error for user {chat_id} attempt {attempt}/{attempts}: {exc}. Retrying in {delay}s"
+                    )
+                    if delay:
+                        await asyncio.sleep(delay)
+                    continue
+                else:
+                    logger.error(
+                        f"Weather service failed after {attempts} attempts for user {chat_id}: {exc}"
+                    )
+            except Exception:
+                # Non WeatherServiceError unexpected failure; decide whether to retry.
+                if attempt < attempts:
+                    logger.exception(
+                        f"Unexpected weather fetch error attempt {attempt}/{attempts} for user {chat_id}; retrying in {delay}s"
+                    )
+                    if delay:
+                        await asyncio.sleep(delay)
+                    continue
+                else:
+                    logger.exception(
+                        f"Unexpected weather fetch error after {attempts} attempts for user {chat_id}"
+                    )
+        if weather_data is None:
+            # All attempts failed; send dedicated unavailable message
+            user_lang = await user_service.get_user_language(str(chat_id)) or "ru"
+            await context.bot.send_message(
+                chat_id, deps.translate("weather_service_unavailable", user_lang)
+            )
+            return
 
         msg = deps.weather_formatter(
             weather_data, place_label=home.label, lang=user_lang
@@ -162,12 +209,13 @@ async def send_home_weather(context: ContextTypes.DEFAULT_TYPE) -> None:
     except WeatherQuotaExceededError as e:
         tz_name = home.timezone if home else None
         reset_text = format_reset_time(e.reset_at, tz_name)
+        user_lang = await deps.user_service.get_user_language(str(chat_id)) or "ru"
         await context.bot.send_message(
             chat_id,
             deps.translate("weather_quota_exceeded", user_lang, reset_time=reset_text),
         )
         await deps.quota_notifier(context.bot)
-    except (ValidationError, StorageError, WeatherServiceError) as e:
+    except (ValidationError, StorageError) as e:
         logger.error(f"Error sending home weather to user {chat_id}: {e}")
         user_lang = await deps.user_service.get_user_language(str(chat_id)) or "ru"
         await context.bot.send_message(

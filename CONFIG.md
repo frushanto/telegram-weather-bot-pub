@@ -58,6 +58,19 @@ Backups are written to `data/backups/` as `storage-YYYYmmdd-HHMMSS.json` and old
 
 An example of the expected file format is available at `data/weather_api_quota_example.json`.
 
+## Subscription Delivery Retry
+
+When scheduled delivery fails to fetch weather (provider outage or transient error),
+the bot will retry automatically before notifying the user that the service is
+temporarily unavailable. These settings control the retry policy:
+
+| Variable                              | Default | Description                                                    |
+| ------------------------------------- | ------- | -------------------------------------------------------------- |
+| `SCHEDULE_WEATHER_RETRY_ATTEMPTS`     | 3       | How many times to try fetching weather before giving up.       |
+| `SCHEDULE_WEATHER_RETRY_DELAY_SEC`    | 5       | Delay in seconds between attempts (non-blocking `asyncio.sleep`). |
+
+If all attempts fail, a localized message is sent that the weather service is temporarily unavailable.
+
 
 ## File Layout
 
@@ -143,4 +156,8 @@ METRICS_HOST=127.0.0.1
 METRICS_PORT=9000
 HEALTH_HOST=127.0.0.1
 HEALTH_PORT=9001
+
+# Scheduled delivery retry (optional)
+SCHEDULE_WEATHER_RETRY_ATTEMPTS=3
+SCHEDULE_WEATHER_RETRY_DELAY_SEC=5
 ```

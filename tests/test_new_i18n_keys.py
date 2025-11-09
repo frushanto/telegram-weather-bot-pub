@@ -204,3 +204,11 @@ class TestNewI18nKeys:
                     assert (
                         "❌" in value or "fehler" in value.lower()
                     ), f"Error key '{key}' doesn't indicate error in German"
+
+    def test_weather_service_unavailable_key_present(self, languages):
+        """Ensure the new outage message exists in all supported languages."""
+        from weatherbot.presentation.i18n import i18n
+
+        for lang in languages:
+            text = i18n.get("weather_service_unavailable", lang)
+            assert text, f"Missing 'weather_service_unavailable' for {lang}"

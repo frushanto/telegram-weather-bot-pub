@@ -36,6 +36,7 @@ from weatherbot.presentation.validation import (
     SubscribeTimeModel,
     validate_payload,
 )
+from weatherbot.utils.text import matches_button
 from weatherbot.utils.time import format_reset_time
 
 logger = logging.getLogger(__name__)
@@ -155,6 +156,9 @@ async def on_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     text = update.message.text
+    if not text:  # Guard against None or empty text
+        return
+
     chat_id = update.effective_chat.id
     user_service = get_user_service()
     weather_service = get_weather_application_service()
@@ -175,11 +179,22 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
                 return
 
-        weather_city_label = i18n.get("weather_city_button", user_lang)
-        weather_home_label = i18n.get("weather_home_button", user_lang)
-        set_home_label = i18n.get("set_home_button", user_lang)
-        unset_home_label = i18n.get("remove_home_button", user_lang)
-        help_label = i18n.get("help_button", user_lang)
+        # To handle keyboard caching issues after language changes,
+        # check button text against all supported languages
+        SUPPORTED_LANGUAGES = ["ru", "en", "de"]
+
+        def matches_button_any_lang(text: str, button_key: str) -> bool:
+            """Check if text matches button in any supported language."""
+            return any(
+                matches_button(text, i18n.get(button_key, lang))
+                for lang in SUPPORTED_LANGUAGES
+            )
+
+        is_help_button = matches_button_any_lang(text, "help_button")
+        is_weather_city_button = matches_button_any_lang(text, "weather_city_button")
+        is_weather_home_button = matches_button_any_lang(text, "weather_home_button")
+        is_set_home_button = matches_button_any_lang(text, "set_home_button")
+        is_unset_home_button = matches_button_any_lang(text, "remove_home_button")
 
         if state_store.is_awaiting(chat_id, ConversationMode.AWAITING_SUBSCRIBE_TIME):
             state_store.clear_conversation(chat_id)
@@ -345,7 +360,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 )
             return
 
-        if text == weather_home_label:
+        if is_weather_home_button:
             home = None
             try:
                 home = await user_service.get_user_home(str(chat_id))
@@ -383,7 +398,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     reply_markup=main_keyboard(user_lang),
                 )
 
-        elif text == weather_city_label:
+        elif is_weather_city_button:
             state_store.set_awaiting_mode(
                 chat_id, ConversationMode.AWAITING_CITY_WEATHER
             )
@@ -392,7 +407,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 reply_markup=main_keyboard(user_lang),
             )
 
-        elif text == set_home_label:
+        elif is_set_home_button:
             state_store.set_awaiting_mode(chat_id, ConversationMode.AWAITING_SETHOME)
             await update.message.reply_text(
                 i18n.get("enter_home_city", user_lang),
@@ -400,7 +415,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             return
 
-        elif text == unset_home_label:
+        elif is_unset_home_button:
             try:
                 removed = await user_service.remove_user_home(str(chat_id))
                 if removed:
@@ -420,7 +435,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     reply_markup=main_keyboard(user_lang),
                 )
 
-        elif text == help_label:
+        elif is_help_button:
             help_text = i18n.get(
                 "help_message",
                 user_lang,
@@ -432,7 +447,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 help_text, reply_markup=main_keyboard(user_lang)
             )
 
-        elif text == BTN_LANGUAGE:
+        elif matches_button(text, BTN_LANGUAGE):
             from weatherbot.handlers.commands import language_cmd
 
             await language_cmd.__wrapped__(update, context)

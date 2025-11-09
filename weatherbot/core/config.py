@@ -43,6 +43,8 @@ class BotConfig:
     metrics_port: int = 9000
     health_host: str = "127.0.0.1"
     health_port: int = 9001
+    schedule_weather_retry_attempts: int = 3
+    schedule_weather_retry_delay_sec: int = 5
 
     @classmethod
     def from_env(cls) -> "BotConfig":
@@ -105,6 +107,12 @@ class BotConfig:
         metrics_port = int(os.getenv("METRICS_PORT", "9000"))
         health_host = os.getenv("HEALTH_HOST", "127.0.0.1")
         health_port = int(os.getenv("HEALTH_PORT", "9001"))
+        schedule_weather_retry_attempts = int(
+            os.getenv("SCHEDULE_WEATHER_RETRY_ATTEMPTS", "3")
+        )
+        schedule_weather_retry_delay_sec = int(
+            os.getenv("SCHEDULE_WEATHER_RETRY_DELAY_SEC", "5")
+        )
 
         return cls(
             token=token,
@@ -123,6 +131,8 @@ class BotConfig:
             metrics_port=metrics_port,
             health_host=health_host,
             health_port=health_port,
+            schedule_weather_retry_attempts=schedule_weather_retry_attempts,
+            schedule_weather_retry_delay_sec=schedule_weather_retry_delay_sec,
         )
 
 

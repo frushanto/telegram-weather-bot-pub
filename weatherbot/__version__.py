@@ -1,9 +1,20 @@
-__version__ = "3.1.1"
-__version_info__ = (3, 1, 1)
-__release_date__ = "20.10.2025"
+__version__ = "3.1.2"
+__version_info__ = (3, 1, 2)
+__release_date__ = "09.11.2025"
 __supported_languages__ = "Русский, English, Deutsch"
 
 RELEASE_NOTES = """
+🎉 New in 3.1.2
+---------------
+- 🛠️ Robust keyboard button matching: prevents Help button misinterpretation across ru/en/de when Telegram sends text without emoji or with unicode variations
+- � Telegram keyboard caching fix: buttons now work correctly when users change languages (client-side keyboard cache no longer causes button misrouting)
+- �🔁 Scheduled delivery retry policy: configurable retry attempts and delays for subscription weather; graceful fallback message when provider is unavailable
+- 🧪 Tests and quality: added normalization tests and keyboard caching tests (287 total); CI green across format, lint, tests, and security
+- 🌍 i18n parity: localization keys updated consistently in all languages
+
+Previous Releases
+==================
+
 🎉 New in 3.1.1
 ---------------
 - ✨ Multilingual command menus: Automatic per-chat command localization using Telegram's setMyCommands API
@@ -12,9 +23,6 @@ RELEASE_NOTES = """
 - 🌍 Full i18n support: Command descriptions in English, Russian, and German
 - 📝 LRU caching: Efficient command menu caching to reduce API calls
 - 🧪 Full test coverage: 14 new tests for command menu functionality (total 256 tests passing)
-
-Previous Releases
-==================
 
 🎉 New in 3.1.0
 ---------------

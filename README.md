@@ -1,7 +1,7 @@
 # Telegram Weather Bot
 
 [![CI/CD Pipeline](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml/badge.svg)](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](weatherbot/__version__.py)
+[![Version](https://img.shields.io/badge/version-3.1.2-blue.svg)](weatherbot/__version__.py)
 [![Python](https://img.shields.io/badge/python-3.12-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
@@ -69,6 +69,9 @@ Telegram Weather Bot is an asynchronous Telegram bot that provides real-time wea
    WEATHER_API_QUOTA_PATH=data/weather_api_quota.json  # Optional: Quota storage file
    WEATHER_SERVICE_PROVIDER=open-meteo  # Optional: Weather provider key
    GEOCODE_SERVICE_PROVIDER=nominatim   # Optional: Geocoding provider key
+   # Optional: Retry policy for scheduled weather delivery (subscriptions)
+   SCHEDULE_WEATHER_RETRY_ATTEMPTS=3
+   SCHEDULE_WEATHER_RETRY_DELAY_SEC=5
    ```
 
    - **Security note:** Do NOT commit your `.env` file or any real tokens/keys to the repository. The repository keeps only `.env.*.example` files. If you accidentally commit secrets, rotate them immediately and follow git-history cleanup procedures.
@@ -379,15 +382,14 @@ python app.py
 
 See `weatherbot/__version__.RELEASE_NOTES` for detailed version history and updates.
 
-## 🆕 What's New — Version 3.1.1
+## 🆕 What's New — Version 3.1.2
 
 ### ✨ Release Highlights
-- **✨ Multilingual Command Menus**: Automatic per-chat command localization using Telegram's `setMyCommands` API
-- **✨ Event-Driven Language Updates**: Commands automatically refresh when users change language via `UserLanguageChanged` event
-- **🏗️ Clean Architecture**: Command menu management isolated in presentation layer with event-driven updates
-- **🌍 Full i18n Support**: Command descriptions in English, Russian, and German
-- **📝 LRU Caching**: Efficient command menu caching to reduce Telegram API calls
-- **🧪 Full Test Coverage**: 14 new tests for command menu functionality (total 256 tests passing)
+- **🛠️ Robust Keyboard Matching**: Prevents Help button misrouting when emoji / unicode variants differ (applies to all localized buttons)
+- **🔁 Retry Policy for Scheduled Weather**: Configurable attempts & delay with graceful fallback message on provider outages
+- **🌍 i18n Parity Maintained**: All new/changed strings synchronized across ru/en/de
+- **🧪 Expanded Test Suite**: Added normalization & retry tests (total 282 tests passing)
+- **⚙️ Clean, Reversible Changes**: Minimal diffs respecting layering & DI
 
 For full release notes see `weatherbot.__version__.RELEASE_NOTES` or the project's changelog when available.
 
