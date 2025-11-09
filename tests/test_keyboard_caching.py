@@ -12,6 +12,7 @@ import pytest
 from telegram import Chat, Message, Update, User
 from telegram.ext import ContextTypes
 
+from weatherbot import __version__ as CURRENT_VERSION
 from weatherbot.handlers.messages import (
     MessageHandlerDependencies,
     configure_message_handlers,
@@ -121,7 +122,7 @@ async def test_help_button_works_with_english_keyboard_and_russian_language(
     help_text = call_args[0][0]
 
     # Verify it's a help message (contains version info)
-    assert "3.1.2" in help_text  # Version should be in help text
+    assert CURRENT_VERSION in help_text  # Version should be in help text
     assert "Русский" in help_text or "Russian" in help_text or "ru" in help_text
 
     # Should NOT have tried to geocode
@@ -215,7 +216,7 @@ async def test_all_button_variants_recognized_simultaneously(
         assert mock_update.message.reply_text.called, f"Failed for variant: {variant}"
         call_args = mock_update.message.reply_text.call_args
         response = call_args[0][0]
-        assert "3.1.2" in response, f"Help text missing for variant: {variant}"
+        assert CURRENT_VERSION in response, f"Help text missing for variant: {variant}"
 
 
 @pytest.mark.asyncio

@@ -1,9 +1,19 @@
-__version__ = "3.1.2"
-__version_info__ = (3, 1, 2)
+__version__ = "3.1.3"
+__version_info__ = (3, 1, 3)
 __release_date__ = "09.11.2025"
 __supported_languages__ = "Русский, English, Deutsch"
 
 RELEASE_NOTES = """
+🎉 New in 3.1.3
+---------------
+- 🔒 Security: Redacts Telegram bot token from logs (masking tokens in URLs like https://api.telegram.org/bot<token>/… as ***REDACTED***)
+- 🔇 Noise reduction: Lowered httpx/urllib3 log level to WARNING to avoid accidental token exposure
+- 🧪 Tests: Added logging redaction tests; CI green
+- 🌍 i18n: Updated admin “What’s new” strings to 3.1.3 in ru/en/de
+
+Previous Releases
+==================
+
 🎉 New in 3.1.2
 ---------------
 - 🛠️ Robust keyboard button matching: prevents Help button misinterpretation across ru/en/de when Telegram sends text without emoji or with unicode variations
@@ -11,9 +21,6 @@ RELEASE_NOTES = """
 - �🔁 Scheduled delivery retry policy: configurable retry attempts and delays for subscription weather; graceful fallback message when provider is unavailable
 - 🧪 Tests and quality: added normalization tests and keyboard caching tests (287 total); CI green across format, lint, tests, and security
 - 🌍 i18n parity: localization keys updated consistently in all languages
-
-Previous Releases
-==================
 
 🎉 New in 3.1.1
 ---------------

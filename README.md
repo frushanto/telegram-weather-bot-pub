@@ -1,7 +1,7 @@
 # Telegram Weather Bot
 
 [![CI/CD Pipeline](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml/badge.svg)](https://github.com/frushanto/telegram-weather-bot-pub/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-3.1.2-blue.svg)](weatherbot/__version__.py)
+[![Version](https://img.shields.io/badge/version-3.1.3-blue.svg)](weatherbot/__version__.py)
 [![Python](https://img.shields.io/badge/python-3.12-green.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
@@ -382,14 +382,13 @@ python app.py
 
 See `weatherbot/__version__.RELEASE_NOTES` for detailed version history and updates.
 
-## 🆕 What's New — Version 3.1.2
+## 🆕 What's New — Version 3.1.3
 
-### ✨ Release Highlights
-- **🛠️ Robust Keyboard Matching**: Prevents Help button misrouting when emoji / unicode variants differ (applies to all localized buttons)
-- **🔁 Retry Policy for Scheduled Weather**: Configurable attempts & delay with graceful fallback message on provider outages
-- **🌍 i18n Parity Maintained**: All new/changed strings synchronized across ru/en/de
-- **🧪 Expanded Test Suite**: Added normalization & retry tests (total 282 tests passing)
-- **⚙️ Clean, Reversible Changes**: Minimal diffs respecting layering & DI
+### 🔒 Patch Highlights
+- **Security Log Redaction**: Masks Telegram bot token in any logged API URL (replaced with ***REDACTED***).
+- **Lower Noise**: Suppressed verbose httpx/urllib3 INFO logs (now WARNING) to reduce accidental secret exposure.
+- **Test Coverage**: Added redaction tests; full suite green (290 tests).
+- **Version Sync**: Locales, release notes, README badge updated for 3.1.3.
 
 For full release notes see `weatherbot.__version__.RELEASE_NOTES` or the project's changelog when available.
 
